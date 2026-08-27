@@ -1,0 +1,16 @@
+# keep repo small - old run artifacts not needed in cloud
+__pycache__/
+*.pyc
+.venv/
+venv/
+screenshots/
+screenshots_*/
+shots_*/
+shots_hack/
+*.png
+run_log*.json
+live/
+data/
+analysis/
+*.log
+.DS_Store

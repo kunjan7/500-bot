@@ -1,0 +1,564 @@
+{
+  "top_batters": [
+    {
+      "name": "Viv Richards",
+      "lo": 3,
+      "hi": 4,
+      "b": 96,
+      "p": 96,
+      "bl": 48,
+      "wk": false,
+      "squad": "westindies1980s",
+      "squad_name": "West Indies",
+      "squad_season": "1980s"
+    },
+    {
+      "name": "Rohit Sharma",
+      "lo": 1,
+      "hi": 2,
+      "b": 92,
+      "p": 94,
+      "bl": 8,
+      "wk": false,
+      "squad": "india2020s",
+      "squad_name": "India",
+      "squad_season": "2020s"
+    },
+    {
+      "name": "Virat Kohli",
+      "lo": 2,
+      "hi": 3,
+      "b": 97,
+      "p": 90,
+      "bl": 6,
+      "wk": false,
+      "squad": "india2010s",
+      "squad_name": "India",
+      "squad_season": "2010s"
+    },
+    {
+      "name": "Travis Head",
+      "lo": 1,
+      "hi": 2,
+      "b": 89,
+      "p": 94,
+      "bl": 42,
+      "wk": false,
+      "squad": "australia2020s",
+      "squad_name": "Australia",
+      "squad_season": "2020s"
+    },
+    {
+      "name": "Sachin Tendulkar",
+      "lo": 1,
+      "hi": 4,
+      "b": 92,
+      "p": 91,
+      "bl": 40,
+      "wk": false,
+      "squad": "india1990s",
+      "squad_name": "India",
+      "squad_season": "1990s"
+    },
+    {
+      "name": "Sachin Tendulkar",
+      "lo": 1,
+      "hi": 2,
+      "b": 95,
+      "p": 88,
+      "bl": 38,
+      "wk": false,
+      "squad": "india2000s",
+      "squad_name": "India",
+      "squad_season": "2000s"
+    },
+    {
+      "name": "Virender Sehwag",
+      "lo": 1,
+      "hi": 2,
+      "b": 86,
+      "p": 94,
+      "bl": 40,
+      "wk": false,
+      "squad": "india2000s",
+      "squad_name": "India",
+      "squad_season": "2000s"
+    },
+    {
+      "name": "Virat Kohli",
+      "lo": 2,
+      "hi": 3,
+      "b": 95,
+      "p": 88,
+      "bl": 6,
+      "wk": false,
+      "squad": "india2020s",
+      "squad_name": "India",
+      "squad_season": "2020s"
+    },
+    {
+      "name": "Brian Lara",
+      "lo": 2,
+      "hi": 4,
+      "b": 94,
+      "p": 88,
+      "bl": 6,
+      "wk": false,
+      "squad": "westindies1990s",
+      "squad_name": "West Indies",
+      "squad_season": "1990s"
+    },
+    {
+      "name": "Chris Gayle",
+      "lo": 1,
+      "hi": 2,
+      "b": 85,
+      "p": 94,
+      "bl": 40,
+      "wk": false,
+      "squad": "westindies2010s",
+      "squad_name": "West Indies",
+      "squad_season": "2010s"
+    },
+    {
+      "name": "David Warner",
+      "lo": 1,
+      "hi": 2,
+      "b": 88,
+      "p": 90,
+      "bl": 6,
+      "wk": false,
+      "squad": "australia2010s",
+      "squad_name": "Australia",
+      "squad_season": "2010s"
+    },
+    {
+      "name": "David Warner",
+      "lo": 1,
+      "hi": 2,
+      "b": 88,
+      "p": 90,
+      "bl": 6,
+      "wk": false,
+      "squad": "australia2020s",
+      "squad_name": "Australia",
+      "squad_season": "2020s"
+    },
+    {
+      "name": "Sanath Jayasuriya",
+      "lo": 1,
+      "hi": 2,
+      "b": 83,
+      "p": 93,
+      "bl": 64,
+      "wk": false,
+      "squad": "srilanka1990s",
+      "squad_name": "Sri Lanka",
+      "squad_season": "1990s"
+    },
+    {
+      "name": "Rohit Sharma",
+      "lo": 1,
+      "hi": 2,
+      "b": 90,
+      "p": 88,
+      "bl": 8,
+      "wk": false,
+      "squad": "india2010s",
+      "squad_name": "India",
+      "squad_season": "2010s"
+    },
+    {
+      "name": "Jason Roy",
+      "lo": 1,
+      "hi": 2,
+      "b": 84,
+      "p": 92,
+      "bl": 6,
+      "wk": false,
+      "squad": "england2010s",
+      "squad_name": "England",
+      "squad_season": "2010s"
+    },
+    {
+      "name": "Finn Allen",
+      "lo": 1,
+      "hi": 2,
+      "b": 80,
+      "p": 94,
+      "bl": 6,
+      "wk": false,
+      "squad": "newzealand2020s",
+      "squad_name": "New Zealand",
+      "squad_season": "2020s"
+    },
+    {
+      "name": "Aravinda de Silva",
+      "lo": 3,
+      "hi": 5,
+      "b": 87,
+      "p": 89,
+      "bl": 56,
+      "wk": false,
+      "squad": "srilanka1990s",
+      "squad_name": "Sri Lanka",
+      "squad_season": "1990s"
+    },
+    {
+      "name": "Saeed Anwar",
+      "lo": 1,
+      "hi": 2,
+      "b": 88,
+      "p": 88,
+      "bl": 15,
+      "wk": false,
+      "squad": "pakistan1990s",
+      "squad_name": "Pakistan",
+      "squad_season": "1990s"
+    },
+    {
+      "name": "Shubman Gill",
+      "lo": 1,
+      "hi": 2,
+      "b": 90,
+      "p": 86,
+      "bl": 6,
+      "wk": false,
+      "squad": "india2020s",
+      "squad_name": "India",
+      "squad_season": "2020s"
+    },
+    {
+      "name": "David Miller",
+      "lo": 5,
+      "hi": 7,
+      "b": 81,
+      "p": 92,
+      "bl": 6,
+      "wk": false,
+      "squad": "southafrica2020s",
+      "squad_name": "South Africa",
+      "squad_season": "2020s"
+    }
+  ],
+  "top_bowlers": [
+    {
+      "name": "Malcolm Marshall",
+      "lo": 8,
+      "hi": 10,
+      "b": 36,
+      "p": 66,
+      "bl": 96,
+      "wk": false,
+      "squad": "westindies1980s",
+      "squad_name": "West Indies",
+      "squad_season": "1980s"
+    },
+    {
+      "name": "Muttiah Muralitharan",
+      "lo": 9,
+      "hi": 11,
+      "b": 26,
+      "p": 56,
+      "bl": 96,
+      "wk": false,
+      "squad": "srilanka1990s",
+      "squad_name": "Sri Lanka",
+      "squad_season": "1990s"
+    },
+    {
+      "name": "Muttiah Muralitharan",
+      "lo": 9,
+      "hi": 11,
+      "b": 26,
+      "p": 56,
+      "bl": 96,
+      "wk": false,
+      "squad": "srilanka2000s",
+      "squad_name": "Sri Lanka",
+      "squad_season": "2000s"
+    },
+    {
+      "name": "Wasim Akram",
+      "lo": 6,
+      "hi": 8,
+      "b": 48,
+      "p": 80,
+      "bl": 95,
+      "wk": false,
+      "squad": "pakistan1990s",
+      "squad_name": "Pakistan",
+      "squad_season": "1990s"
+    },
+    {
+      "name": "Shane Warne",
+      "lo": 8,
+      "hi": 10,
+      "b": 34,
+      "p": 58,
+      "bl": 95,
+      "wk": false,
+      "squad": "australia1990s",
+      "squad_name": "Australia",
+      "squad_season": "1990s"
+    },
+    {
+      "name": "Shane Warne",
+      "lo": 8,
+      "hi": 10,
+      "b": 34,
+      "p": 58,
+      "bl": 95,
+      "wk": false,
+      "squad": "australia2000s",
+      "squad_name": "Australia",
+      "squad_season": "2000s"
+    },
+    {
+      "name": "Jasprit Bumrah",
+      "lo": 9,
+      "hi": 11,
+      "b": 26,
+      "p": 58,
+      "bl": 94,
+      "wk": false,
+      "squad": "india2020s",
+      "squad_name": "India",
+      "squad_season": "2020s"
+    },
+    {
+      "name": "Glenn McGrath",
+      "lo": 10,
+      "hi": 11,
+      "b": 18,
+      "p": 42,
+      "bl": 94,
+      "wk": false,
+      "squad": "australia2000s",
+      "squad_name": "Australia",
+      "squad_season": "2000s"
+    },
+    {
+      "name": "Mitchell Starc",
+      "lo": 9,
+      "hi": 11,
+      "b": 32,
+      "p": 64,
+      "bl": 94,
+      "wk": false,
+      "squad": "australia2010s",
+      "squad_name": "Australia",
+      "squad_season": "2010s"
+    },
+    {
+      "name": "Mitchell Starc",
+      "lo": 9,
+      "hi": 11,
+      "b": 32,
+      "p": 66,
+      "bl": 94,
+      "wk": false,
+      "squad": "australia2020s",
+      "squad_name": "Australia",
+      "squad_season": "2020s"
+    },
+    {
+      "name": "Joel Garner",
+      "lo": 9,
+      "hi": 11,
+      "b": 24,
+      "p": 54,
+      "bl": 94,
+      "wk": false,
+      "squad": "westindies1980s",
+      "squad_name": "West Indies",
+      "squad_season": "1980s"
+    },
+    {
+      "name": "Curtly Ambrose",
+      "lo": 9,
+      "hi": 11,
+      "b": 28,
+      "p": 54,
+      "bl": 94,
+      "wk": false,
+      "squad": "westindies1990s",
+      "squad_name": "West Indies",
+      "squad_season": "1990s"
+    },
+    {
+      "name": "Rashid Khan",
+      "lo": 8,
+      "hi": 9,
+      "b": 44,
+      "p": 86,
+      "bl": 94,
+      "wk": false,
+      "squad": "afghanistan2020s",
+      "squad_name": "Afghanistan",
+      "squad_season": "2020s"
+    },
+    {
+      "name": "Waqar Younis",
+      "lo": 9,
+      "hi": 11,
+      "b": 24,
+      "p": 58,
+      "bl": 93,
+      "wk": false,
+      "squad": "pakistan1990s",
+      "squad_name": "Pakistan",
+      "squad_season": "1990s"
+    },
+    {
+      "name": "Glenn McGrath",
+      "lo": 10,
+      "hi": 11,
+      "b": 18,
+      "p": 42,
+      "bl": 93,
+      "wk": false,
+      "squad": "australia1990s",
+      "squad_name": "Australia",
+      "squad_season": "1990s"
+    }
+  ],
+  "top_wk": [],
+  "theoretical_xi": [
+    [
+      1,
+      {
+        "name": "Rohit Sharma",
+        "lo": 1,
+        "hi": 2,
+        "b": 92,
+        "p": 94,
+        "bl": 8,
+        "wk": false,
+        "squad": "india2020s",
+        "squad_name": "India",
+        "squad_season": "2020s"
+      }
+    ],
+    [
+      2,
+      {
+        "name": "Travis Head",
+        "lo": 1,
+        "hi": 2,
+        "b": 89,
+        "p": 94,
+        "bl": 42,
+        "wk": false,
+        "squad": "australia2020s",
+        "squad_name": "Australia",
+        "squad_season": "2020s"
+      }
+    ],
+    [
+      3,
+      {
+        "name": "Viv Richards",
+        "lo": 3,
+        "hi": 4,
+        "b": 96,
+        "p": 96,
+        "bl": 48,
+        "wk": false,
+        "squad": "westindies1980s",
+        "squad_name": "West Indies",
+        "squad_season": "1980s"
+      }
+    ],
+    [
+      4,
+      {
+        "name": "Virat Kohli",
+        "lo": 2,
+        "hi": 3,
+        "b": 97,
+        "p": 90,
+        "bl": 6,
+        "wk": false,
+        "squad": "india2010s",
+        "squad_name": "India",
+        "squad_season": "2010s"
+      }
+    ],
+    [
+      7,
+      {
+        "name": "Wasim Akram",
+        "lo": 6,
+        "hi": 8,
+        "b": 48,
+        "p": 80,
+        "bl": 95,
+        "wk": false,
+        "squad": "pakistan1990s",
+        "squad_name": "Pakistan",
+        "squad_season": "1990s"
+      }
+    ],
+    [
+      6,
+      {
+        "name": "Malcolm Marshall",
+        "lo": 8,
+        "hi": 10,
+        "b": 36,
+        "p": 66,
+        "bl": 96,
+        "wk": false,
+        "squad": "westindies1980s",
+        "squad_name": "West Indies",
+        "squad_season": "1980s"
+      }
+    ],
+    [
+      7,
+      {
+        "name": "Muttiah Muralitharan",
+        "lo": 9,
+        "hi": 11,
+        "b": 26,
+        "p": 56,
+        "bl": 96,
+        "wk": false,
+        "squad": "srilanka1990s",
+        "squad_name": "Sri Lanka",
+        "squad_season": "1990s"
+      }
+    ],
+    [
+      8,
+      {
+        "name": "Muttiah Muralitharan",
+        "lo": 9,
+        "hi": 11,
+        "b": 26,
+        "p": 56,
+        "bl": 96,
+        "wk": false,
+        "squad": "srilanka2000s",
+        "squad_name": "Sri Lanka",
+        "squad_season": "2000s"
+      }
+    ],
+    [
+      9,
+      {
+        "name": "Shane Warne",
+        "lo": 8,
+        "hi": 10,
+        "b": 34,
+        "p": 58,
+        "bl": 95,
+        "wk": false,
+        "squad": "australia1990s",
+        "squad_name": "Australia",
+        "squad_season": "1990s"
+      }
+    ]
+  ]
+}

@@ -1,0 +1,457 @@
+{
+  "freq_under40": {
+    "AB de Villiers": 91,
+    "Viv Richards": 84,
+    "Heinrich Klaasen": 63,
+    "Muttiah Muralitharan": 62,
+    "Shane Warne": 56,
+    "Virat Kohli": 54,
+    "Jos Buttler": 51,
+    "Sachin Tendulkar": 50,
+    "Rashid Khan": 41,
+    "Shahid Afridi": 40,
+    "Wasim Akram": 36,
+    "Rohit Sharma": 36,
+    "Malcolm Marshall": 34,
+    "Brian Lara": 31,
+    "Travis Head": 31,
+    "Mitchell Starc": 31,
+    "Lasith Malinga": 23,
+    "MS Dhoni": 23,
+    "Lance Klusener": 23,
+    "Glenn Maxwell": 22,
+    "Trent Boult": 20,
+    "Shane Bond": 18,
+    "Nicholas Pooran": 18,
+    "Chris Gayle": 17,
+    "Adam Gilchrist": 16,
+    "Shoaib Akhtar": 15,
+    "Curtly Ambrose": 13,
+    "Shaheen Afridi": 11,
+    "Kumar Sangakkara": 10,
+    "Jasprit Bumrah": 10,
+    "Kevin Pietersen": 10,
+    "Saeed Ajmal": 10,
+    "Babar Azam": 10,
+    "Allan Donald": 10,
+    "Waqar Younis": 10,
+    "Dale Steyn": 8,
+    "Anil Kumble": 8,
+    "Michael Bevan": 8,
+    "David Warner": 8,
+    "Aravinda de Silva": 7,
+    "Sanath Jayasuriya": 7,
+    "Wanindu Hasaranga": 6,
+    "David Miller": 6,
+    "Jonny Bairstow": 6,
+    "Shaun Pollock": 4,
+    "Hashim Amla": 4,
+    "Imran Khan": 4,
+    "Andy Flower": 3,
+    "Finn Allen": 3,
+    "Glenn McGrath": 3,
+    "Saeed Anwar": 3,
+    "Chris Cairns": 3,
+    "Jofra Archer": 3,
+    "Martin Guptill": 3,
+    "Graeme Hick": 2,
+    "Mohammad Azharuddin": 2,
+    "Shakib Al Hasan": 2,
+    "Neil Fairbrother": 2,
+    "Martin Crowe": 2,
+    "Chaminda Vaas": 2,
+    "Daryl Mitchell": 2,
+    "Pathum Nissanka": 2,
+    "Glenn Phillips": 2,
+    "Devon Conway": 1,
+    "Jacques Kallis": 1,
+    "Eoin Morgan": 1,
+    "Mohammad Amir": 1,
+    "Sharma": 1,
+    "Kohli": 1,
+    "Richards": 1,
+    "Lara": 1,
+    "Villiers": 1,
+    "Klaasen": 1,
+    "Dhoni": 1,
+    "Akram": 1,
+    "Ambrose": 1,
+    "Garner": 1,
+    "Younis": 1,
+    "Mohammad Yousuf": 1,
+    "Virender Sehwag": 1,
+    "Andrew Symonds": 1,
+    "Rassie van der Dussen": 1,
+    "Kane Williamson": 1,
+    "Ricky Ponting": 1,
+    "Heath Streak": 1,
+    "Glenn McGrat": 1,
+    "Mustafizur Rahman": 1,
+    "Jason Holder": 1,
+    "Ajay Jadeja": 1,
+    "Graham Gooch": 1,
+    "Makhaya Ntini": 1,
+    "Neil Johnson": 1,
+    "Harry Brook": 1,
+    "Saqlain Mushtaq": 1,
+    "Yuvraj Singh": 1,
+    "Daniel Vettori": 1,
+    "Gordon Greenidge": 1,
+    "Pat Cummins": 1,
+    "Suresh Raina": 1,
+    "Shivnarine Chanderpaul": 1
+  },
+  "freq_top100": {
+    "Viv Richards": 117,
+    "AB de Villiers": 114,
+    "Muttiah Muralitharan": 87,
+    "Jos Buttler": 79,
+    "Heinrich Klaasen": 75,
+    "Virat Kohli": 72,
+    "Shane Warne": 70,
+    "Sachin Tendulkar": 68,
+    "Rashid Khan": 58,
+    "Shahid Afridi": 57,
+    "Rohit Sharma": 56,
+    "Wasim Akram": 53,
+    "Travis Head": 41,
+    "Malcolm Marshall": 41,
+    "Mitchell Starc": 38,
+    "Brian Lara": 38,
+    "MS Dhoni": 35,
+    "Lasith Malinga": 33,
+    "Glenn Maxwell": 32,
+    "Nicholas Pooran": 31,
+    "Chris Gayle": 31,
+    "Trent Boult": 29,
+    "Lance Klusener": 27,
+    "Shane Bond": 25,
+    "Shoaib Akhtar": 20,
+    "Shaheen Afridi": 19,
+    "Curtly Ambrose": 19,
+    "Adam Gilchrist": 19,
+    "Kevin Pietersen": 17,
+    "Michael Bevan": 16,
+    "Allan Donald": 16,
+    "Babar Azam": 15,
+    "Saeed Ajmal": 14,
+    "Waqar Younis": 14,
+    "Sanath Jayasuriya": 13,
+    "Kumar Sangakkara": 13,
+    "Jasprit Bumrah": 13,
+    "David Warner": 13,
+    "Anil Kumble": 11,
+    "David Miller": 11,
+    "Wanindu Hasaranga": 10,
+    "Aravinda de Silva": 9,
+    "Dale Steyn": 8,
+    "Jonny Bairstow": 7,
+    "Jofra Archer": 7,
+    "Glenn McGrath": 7,
+    "Daryl Mitchell": 6,
+    "Shaun Pollock": 6,
+    "Mustafizur Rahman": 5,
+    "Shakib Al Hasan": 5,
+    "Imran Khan": 5,
+    "Andy Flower": 5,
+    "Martin Guptill": 5,
+    "Finn Allen": 4,
+    "Chris Cairns": 4,
+    "Pathum Nissanka": 4,
+    "Harry Brook": 4,
+    "Martin Crowe": 4,
+    "Neil Fairbrother": 4,
+    "Hashim Amla": 4,
+    "Graeme Hick": 3,
+    "Kane Williamson": 3,
+    "Saeed Anwar": 3,
+    "Heath Streak": 3,
+    "Joel Garner": 3,
+    "Ricky Ponting": 3,
+    "Kagiso Rabada": 2,
+    "Makhaya Ntini": 2,
+    "Suresh Raina": 2,
+    "Yuvraj Singh": 2,
+    "Andrew Flintoff": 2,
+    "Eoin Morgan": 2,
+    "Brendon McCullum": 2,
+    "Pat Cummins": 2,
+    "Mitchell Santner": 2,
+    "Mohammad Azharuddin": 2,
+    "Rassie van der Dussen": 2,
+    "Saqlain Mushtaq": 2,
+    "Mohammad Yousuf": 2,
+    "Chaminda Vaas": 2,
+    "Virender Sehwag": 2,
+    "Glenn Phillips": 2,
+    "Ben Stokes": 1,
+    "Haris Rauf": 1,
+    "Muttiah Muralitharan  above are top  and last  team from today top  now this week topper follows": 1,
+    "MisbahulHaq": 1,
+    "Umar Akmal": 1,
+    "Steve Smith": 1,
+    "Devon Conway": 1,
+    "Matheesha Pathirana": 1,
+    "Jacques Kallis": 1,
+    "Misbah-ul-Haq": 1,
+    "Neil Johnson": 1,
+    "Shoaib Akhtar now all time topper team follow": 1,
+    "Andrew Symonds": 1,
+    "Shubman Gill": 1,
+    "Graham Gooch": 1,
+    "Marcus Trescothick": 1,
+    "Shreyas Iyer": 1,
+    "Boyd Rankin": 1,
+    "Mohammad Amir": 1,
+    "Shivnarine Chanderpaul": 1,
+    "Daniel Vettori": 1,
+    "Glenn McGrat": 1,
+    "Gordon Greenidge": 1,
+    "Jason Holder": 1,
+    "Andre Russell": 1
+  },
+  "pos_freq": {
+    "P1": [
+      [
+        "Rohit Sharma",
+        27
+      ],
+      [
+        "Sachin Tendulkar",
+        23
+      ],
+      [
+        "Travis Head",
+        17
+      ],
+      [
+        "Chris Gayle",
+        10
+      ],
+      [
+        "Adam Gilchrist",
+        7
+      ]
+    ],
+    "P2": [
+      [
+        "Sachin Tendulkar",
+        19
+      ],
+      [
+        "Virat Kohli",
+        18
+      ],
+      [
+        "Travis Head",
+        14
+      ],
+      [
+        "Brian Lara",
+        13
+      ],
+      [
+        "Rohit Sharma",
+        9
+      ]
+    ],
+    "P3": [
+      [
+        "Virat Kohli",
+        36
+      ],
+      [
+        "Viv Richards",
+        31
+      ],
+      [
+        "AB de Villiers",
+        13
+      ],
+      [
+        "Brian Lara",
+        7
+      ],
+      [
+        "Kumar Sangakkara",
+        5
+      ]
+    ],
+    "P4": [
+      [
+        "Viv Richards",
+        53
+      ],
+      [
+        "AB de Villiers",
+        22
+      ],
+      [
+        "Brian Lara",
+        11
+      ],
+      [
+        "Kevin Pietersen",
+        8
+      ],
+      [
+        "Sachin Tendulkar",
+        4
+      ]
+    ],
+    "P5": [
+      [
+        "AB de Villiers",
+        56
+      ],
+      [
+        "Heinrich Klaasen",
+        21
+      ],
+      [
+        "Jos Buttler",
+        9
+      ],
+      [
+        "MS Dhoni",
+        5
+      ],
+      [
+        "Aravinda de Silva",
+        5
+      ]
+    ],
+    "P6": [
+      [
+        "Heinrich Klaasen",
+        39
+      ],
+      [
+        "Jos Buttler",
+        32
+      ],
+      [
+        "Nicholas Pooran",
+        14
+      ],
+      [
+        "MS Dhoni",
+        7
+      ],
+      [
+        "Glenn Maxwell",
+        6
+      ]
+    ],
+    "P7": [
+      [
+        "Shahid Afridi",
+        36
+      ],
+      [
+        "Lance Klusener",
+        21
+      ],
+      [
+        "Glenn Maxwell",
+        15
+      ],
+      [
+        "MS Dhoni",
+        11
+      ],
+      [
+        "Jos Buttler",
+        10
+      ]
+    ],
+    "P8": [
+      [
+        "Wasim Akram",
+        36
+      ],
+      [
+        "Shane Warne",
+        23
+      ],
+      [
+        "Rashid Khan",
+        19
+      ],
+      [
+        "Malcolm Marshall",
+        12
+      ],
+      [
+        "Wanindu Hasaranga",
+        4
+      ]
+    ],
+    "P9": [
+      [
+        "Rashid Khan",
+        22
+      ],
+      [
+        "Shane Warne",
+        17
+      ],
+      [
+        "Malcolm Marshall",
+        16
+      ],
+      [
+        "Muttiah Muralitharan",
+        15
+      ],
+      [
+        "Mitchell Starc",
+        12
+      ]
+    ],
+    "P10": [
+      [
+        "Shane Warne",
+        16
+      ],
+      [
+        "Muttiah Muralitharan",
+        14
+      ],
+      [
+        "Trent Boult",
+        11
+      ],
+      [
+        "Mitchell Starc",
+        10
+      ],
+      [
+        "Shane Bond",
+        7
+      ]
+    ],
+    "P11": [
+      [
+        "Muttiah Muralitharan",
+        33
+      ],
+      [
+        "Lasith Malinga",
+        14
+      ],
+      [
+        "Mitchell Starc",
+        9
+      ],
+      [
+        "Trent Boult",
+        8
+      ],
+      [
+        "Curtly Ambrose",
+        7
+      ]
+    ]
+  }
+}

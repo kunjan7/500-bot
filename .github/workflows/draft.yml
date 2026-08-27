@@ -1,0 +1,31 @@
+name: 500-0 freq-drafter 24/7
+on:
+  schedule:
+    - cron: "0 * * * *"   # every hour — 100% free, no card. Change to "*/30 * * * *" for every 30m
+  workflow_dispatch:       # manual Run button
+  push:
+    branches: [main]
+
+jobs:
+  draft:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r requirements.txt
+      - run: python -m playwright install --with-deps chromium
+      - name: Run freq drafter (loop, 20s hold, explore lowest overs)
+        env:
+          HANDLE: ${{ secrets.HANDLE || 'kunjan1387' }}
+          MAX_DRAFTS: "30"     # 30 drafts per hour ≈ 50 min
+          HOLD_SEC: "20"       # wait 20s after win then continue
+          EXPLORE: "1"         # try other high-freq combos
+        run: python spin_freq.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: shots-${{ github.run_number }}
+          path: shots_hack/
+          retention-days: 7
