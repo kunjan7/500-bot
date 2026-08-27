@@ -22,7 +22,7 @@ jobs:
           MAX_DRAFTS: "30"     # 30 drafts per hour ≈ 50 min
           HOLD_SEC: "20"       # wait 20s after win then continue
           EXPLORE: "1"         # try other high-freq combos
-        run: python spin_freq.py
+        run: xvfb-run --auto-servernum python spin_freq.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
