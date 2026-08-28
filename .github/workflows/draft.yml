@@ -18,7 +18,7 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - name: Run fastest drafter (<35 overs hunt, distinct cloud handle)
         env:
-          HANDLE: ${{ secrets.HANDLE_CLOUD || 'kunjan1387c' }}
+          HANDLE: ${{ secrets.HANDLE_CLOUD || 'kunjan500' }}
           MAX_DRAFTS: "30"     # 30 drafts per hour ≈ 50 min
           HOLD_SEC: "20"       # wait 20s after win then continue
           TARGET_BALLS: "209"  # <210 = <35.0 overs
