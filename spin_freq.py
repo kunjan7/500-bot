@@ -46,6 +46,27 @@ def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 async def setup_route_interception(page):
+    # log leaderboard POSTs to diagnose kunjan700 posting
+    async def lb_log(route):
+        req=route.request
+        try:
+            body=req.post_data or ""
+        except:
+            body=""
+        log(f"  [LB REQ] {req.method} {req.url[:160]} body={body[:400]}")
+        resp=await route.fetch()
+        try:
+            txt=await resp.text()
+            log(f"  [LB RESP] {resp.status} {txt[:600]}")
+            await route.fulfill(response=resp, body=txt, content_type=resp.headers.get("content-type","application/json"))
+        except Exception as e:
+            log(f"  [LB ERR] {e}")
+            await route.continue_()
+    await page.route("**/*500leaderboard*submit*", lb_log)
+    await page.route("**/*500leaderboard*board*", lb_log)
+    await page.route("**/*raasnhafiz*workers.dev*submit*", lb_log)
+    await page.route("**/*raasnhafiz*workers.dev*board*", lb_log)
+    await page.route("**/*raasnhafiz*workers.dev*seed*", lb_log)
     async def intercept(route):
         resp = await route.fetch()
         body = await resp.text()
