@@ -9,7 +9,7 @@ on:
 jobs:
   draft:
     runs-on: ubuntu-22.04
-    timeout-minutes: 55
+    timeout-minutes: 7
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,10 +19,10 @@ jobs:
       - name: Run fastest drafter (<35 overs hunt, distinct cloud handle)
         env:
           HANDLE: ${{ secrets.HANDLE_CLOUD || 'kunjan700' }}
-          MAX_DRAFTS: "30"     # 30 drafts per hour ≈ 50 min
-          HOLD_SEC: "20"       # wait 20s after win then continue
+          MAX_DRAFTS: "2"      # 2 drafts ≈ 2 min for rapid test
+          HOLD_SEC: "2"        # short hold for fast iteration
           TARGET_BALLS: "207"  # <208 = beat current World #1 208 (34.4 overs) for #1 FASTEST & MOST 500s
-          STOP_ON_TARGET: "0"  # keep looping hourly until #1 ALL-TIME + #1 MOST 500s
+          STOP_ON_TARGET: "0"  # keep looping
         run: xvfb-run --auto-servernum python spin_fastest.py
       - uses: actions/upload-artifact@v4
         if: always()
