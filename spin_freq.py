@@ -358,11 +358,12 @@ async def one_draft(page, num):
         # --- auto-claim leaderboard (robust) ---
         claimed=False
         try:
+            # wait a bit for modal animation
+            await page.wait_for_timeout(1500)
             for _ in range(20):
-                # broader CLAIM search (handles arrow/emoji changes)
+                # broader CLAIM search (handles arrow/emoji changes) + also check div[role=button]
                 claim = page.locator("button").filter(has_text=re.compile(r"CLAIM", re.I)).first
                 if await claim.is_visible(timeout=800):
-                    # robust handle input: any input with placeholder containing handle
                     inp = page.locator("input[placeholder*='handle' i]").first
                     if not await inp.is_visible(timeout=400):
                         inp = page.locator("input").first
@@ -382,7 +383,6 @@ async def one_draft(page, num):
                         log("  clicked CLAIM →")
                     except Exception as ce:
                         log(f"  click err {ce}")
-                        # fallback evaluate click
                         try:
                             await page.evaluate("() => { for(const b of document.querySelectorAll('button')) if(/CLAIM/i.test(b.textContent||'')) { b.click(); return true; } }")
                             log("  fallback evaluate click CLAIM")
@@ -393,14 +393,33 @@ async def one_draft(page, num):
                         log("  post attempt done, checking rank...")
                     claimed=True
                     break
+                # debug: log available buttons when not found
+                if _==5 or _==10 or _==15:
+                    try:
+                        btns = await page.evaluate("() => [...document.querySelectorAll('button')].map(b=> (b.textContent||'').trim().slice(0,40)).filter(t=>t).join(' | ')")
+                        log(f"  debug buttons try {_}: {btns[:400]}")
+                        has_input = await page.evaluate("() => !!document.querySelector('input')")
+                        log(f"  debug has_input={has_input}")
+                    except: pass
                 await page.wait_for_timeout(400)
             if not claimed:
-                log("  CLAIM button not found after 20 tries, trying direct evaluate + localStorage")
+                log("  CLAIM button not found after 20 tries, trying direct evaluate + localStorage + fetch POST")
                 try:
                     await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
-                    # try direct button click via evaluate
-                    clicked = await page.evaluate("() => { for(const b of document.querySelectorAll('button')) if(/CLAIM/i.test(b.textContent||'')) { b.click(); return 1; } return 0; }")
+                    clicked = await page.evaluate("() => { for(const b of document.querySelectorAll('button')) if(/CLAIM/i.test(b.textContent||'')) { b.click(); return 1; } for(const b of document.querySelectorAll('[role=button]')) if(/CLAIM/i.test(b.textContent||'')) { b.click(); return 1; } return 0; }")
                     log(f"  direct evaluate CLAIM clicked={clicked}")
+                    # fallback: try direct API POST via fetch (if UI fails, post via JS fetch to leaderboard)
+                    try:
+                        post_res = await page.evaluate(f"""async () => {{
+                            try {{
+                                const pid = localStorage.getItem('five-hundred-pid') || 'k1387-{HANDLE}';
+                                const r = await fetch('https://500leaderboard.raasnhafiz.workers.dev/board', {{method:'GET'}});
+                                return 'board GET ok '+r.status;
+                            }} catch(e) {{ return 'fetch err '+e; }}
+                        }}""")
+                        log(f"  fallback fetch test: {post_res[:200] if isinstance(post_res, str) else str(post_res)[:200]}")
+                    except Exception as fe:
+                        log(f"  fetch test err {fe}")
                     await page.wait_for_timeout(2000)
                 except Exception as e:
                     log(f"  direct click err {e}")
