@@ -9,7 +9,7 @@ on:
 jobs:
   draft:
     runs-on: ubuntu-22.04
-    timeout-minutes: 30
+    timeout-minutes: 55
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -19,7 +19,7 @@ jobs:
       - name: Run freq drafter (<35 overs hunt, distinct cloud handle)
         env:
           HANDLE: ${{ secrets.HANDLE_CLOUD || 'kunjan700' }}
-          MAX_DRAFTS: "15"     # 15 drafts ≈ 18 min - need many tries for <39 overs (top100) to post
+          MAX_DRAFTS: "30"     # 30 drafts ≈ 35 min - max tries for <208 (World #1) + stack MOST
           HOLD_SEC: "2"
           EXPLORE: "1"
         run: xvfb-run --auto-servernum python spin_freq.py
