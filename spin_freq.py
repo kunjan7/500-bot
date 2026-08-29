@@ -355,13 +355,17 @@ async def one_draft(page, num):
 
     if "HISTORY REWRITTEN" in body:
         log("  >>> WIN! HISTORY REWRITTEN <<<")
-        # --- auto-claim leaderboard (P2 modal: "CLAIM MY SPOT →") ---
+        # --- auto-claim leaderboard (robust) ---
+        claimed=False
         try:
-            # wait for modal input/button
-            for _ in range(12):
-                claim = page.locator("button").filter(has_text=re.compile(r"CLAIM MY SPOT", re.I)).first
+            for _ in range(20):
+                # broader CLAIM search (handles arrow/emoji changes)
+                claim = page.locator("button").filter(has_text=re.compile(r"CLAIM", re.I)).first
                 if await claim.is_visible(timeout=800):
-                    inp = page.locator("input[placeholder='pick a handle']").first
+                    # robust handle input: any input with placeholder containing handle
+                    inp = page.locator("input[placeholder*='handle' i]").first
+                    if not await inp.is_visible(timeout=400):
+                        inp = page.locator("input").first
                     try:
                         if await inp.is_visible(timeout=600):
                             v = await inp.input_value()
@@ -369,20 +373,43 @@ async def one_draft(page, num):
                                 await inp.fill(HANDLE)
                                 await page.wait_for_timeout(300)
                                 log(f"  filled handle {HANDLE}")
-                    except: pass
-                    await claim.click(timeout=2000)
-                    log("  clicked CLAIM MY SPOT →")
+                            else:
+                                log(f"  handle already '{v}'")
+                    except Exception as ie:
+                        log(f"  handle fill err {ie}")
+                    try:
+                        await claim.click(timeout=2000)
+                        log("  clicked CLAIM →")
+                    except Exception as ce:
+                        log(f"  click err {ce}")
+                        # fallback evaluate click
+                        try:
+                            await page.evaluate("() => { for(const b of document.querySelectorAll('button')) if(/CLAIM/i.test(b.textContent||'')) { b.click(); return true; } }")
+                            log("  fallback evaluate click CLAIM")
+                        except: pass
                     await page.wait_for_timeout(2500)
-                    # check if posted (ranks appear or "POSTING" gone)
                     body2 = await page.inner_text("body")
-                    if "ALL-TIME" in body2 or "500 CLUB" in body2:
+                    if "ALL-TIME" in body2 or "500 CLUB" in body2 or "RANK" in body2:
                         log("  post attempt done, checking rank...")
+                    claimed=True
                     break
-                await page.wait_for_timeout(500)
-            # also ensure localStorage handle is set
+                await page.wait_for_timeout(400)
+            if not claimed:
+                log("  CLAIM button not found after 20 tries, trying direct evaluate + localStorage")
+                try:
+                    await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
+                    # try direct button click via evaluate
+                    clicked = await page.evaluate("() => { for(const b of document.querySelectorAll('button')) if(/CLAIM/i.test(b.textContent||'')) { b.click(); return 1; } return 0; }")
+                    log(f"  direct evaluate CLAIM clicked={clicked}")
+                    await page.wait_for_timeout(2000)
+                except Exception as e:
+                    log(f"  direct click err {e}")
             await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
+            await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','k1387-{HANDLE}')")
         except Exception as e:
             log(f"  auto-claim err: {e}")
+        if not claimed:
+            log("  WARNING: win not claimed via UI, will still count if localStorage handle set - checking board after hold")
         log(f"  HOLDING win screen {HOLD_AFTER_WIN_SEC}s for manual view (handle={HANDLE})...")
         try:
             await page.wait_for_timeout(HOLD_AFTER_WIN_SEC*1000)
