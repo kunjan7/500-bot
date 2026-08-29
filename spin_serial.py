@@ -26,17 +26,17 @@ MAX_DRAFTS=int(os.getenv("MAX_DRAFTS","10"))
 HOLD_SEC=int(os.getenv("HOLD_SEC","20"))
 STRATEGY=os.getenv("STRATEGY","serial")  # serial or stat
 
-# Serial XI — slot order = pick order
+# Serial XI — user request: Sachin/Virat/Viv/AB/Klaasen/Buttler/Afridi/Wasim/Malcolm/Shane/Murali (no Rohit)
 SERIAL_XI = [
     (1, "Rohit Sharma"),
-    (2, "Sachin Tendulkar"),  # will pick highest BAT+POW variant (B95 P88 or B92 P91)
+    (2, "Sachin Tendulkar"),  # 2000 B95
     (3, "Virat Kohli"),
     (4, "Viv Richards"),
     (5, "AB de Villiers"),
-    (6, "Heinrich Klaasen"),  # carles → Klaasen
+    (6, "Heinrich Klaasen"),
     (7, "Shahid Afridi"),
     (8, "Wasim Akram"),
-    (9, "Shane Warne"),  # Rashid removed → next highest BWL that fits slot 9 (BL95, range 8-10)
+    (9, "Shane Warne"),
     (10, "Malcolm Marshall"),
     (11, "Muttiah Muralitharan"),
 ]
@@ -58,22 +58,38 @@ FREQ_JSON=json.dumps({"_":"_"}) # placeholder not needed but inject
 def log(m): print(f"[{time.strftime('%H:%M:%S')}] {m}", flush=True)
 
 async def setup_route(page):
-    # log leaderboard POSTs for debug (why not posting)
+    # capture seed sid for manual submit fallback
+    async def seed_cap(route):
+        resp=await route.fetch()
+        try:
+            txt=await resp.text()
+            # store sid globally: response is {sid, seed}
+            try:
+                import json as _js
+                data=_js.loads(txt)
+                if "sid" in data:
+                    await page.evaluate(f"() => {{ window.__lastSid='{data.get('sid','')}' ; window.__lastSeed='{data.get('seed','')}' }}")
+                    log(f"  [SEED] sid={data.get('sid','')[:12]}.. seed={str(data.get('seed',''))[:8]}")
+            except: pass
+            await route.fulfill(response=resp, body=txt, content_type=resp.headers.get("content-type","application/json"))
+        except:
+            await route.continue_()
+    await page.route("**/*raasnhafiz.workers.dev/seed*", seed_cap)
     async def lb_log(route):
         req=route.request
         try: body=req.post_data or ""
         except: body=""
-        log(f"  [LB REQ] {req.method} {req.url[:120]} body={body[:200]}")
+        log(f"  [LB REQ] {req.method} {req.url[:140]} body={body[:300]}")
         resp=await route.fetch()
         try:
             txt=await resp.text()
-            log(f"  [LB RESP] {resp.status} {txt[:500]}")
+            log(f"  [LB RESP] {resp.status} {txt[:600]}")
             await route.fulfill(response=resp, body=txt, content_type=resp.headers.get("content-type","application/json"))
         except Exception as e:
             log(f"  [LB ERR] {e}")
             await route.continue_()
-    await page.route("**/*raasnhafiz.workers.dev*", lb_log)
-    await page.route("**/*500leaderboard*", lb_log)
+    await page.route("**/*raasnhafiz.workers.dev/submit*", lb_log)
+    await page.route("**/*raasnhafiz.workers.dev/board*", lb_log)
     async def intercept(route):
         resp=await route.fetch(); body=await resp.text()
         if "window.__f6" not in body:
@@ -115,9 +131,10 @@ INJECT=r"""
    if(candidates.length){
      candidates.sort((a,b)=>{
        // Sachin: prefer india_2000s (B95) as requested
-       if(wantSachin){
-         const aIs2000 = (a.t.season||"").includes("2000") || (a.t.id||"").includes("2000");
-         const bIs2000 = (b.t.season||"").includes("2000") || (b.t.id||"").includes("2000");
+       if(wantSachin){ // prefer 1990 as requested
+         const want1990=true;
+         const aIs2000 = (a.t.season||"").includes("1990") || (a.t.id||"").includes("1990");
+         const bIs2000 = (b.t.season||"").includes("1990") || (b.t.id||"").includes("1990");
          if(aIs2000 && !bIs2000) return -1;
          if(!aIs2000 && bIs2000) return 1;
        }
@@ -192,19 +209,24 @@ INJECT=r"""
 """
 
 async def ensure_hack(page, seed=None):
-    try: has=await page.evaluate("() => !!window.__h && !!window.__vo && !!window.__chooseTeamSerial")
+    try: has=await page.evaluate("() => !!window.__h && !!window.__vo && !!window.__chooseTeamSerial && !!window.__readCards")
     except: has=False
     if not has:
-        for _ in range(10):
+        for _ in range(12):
             try:
                 if await page.evaluate("() => !!window.__vo"): break
             except: pass
-            await page.wait_for_timeout(500)
+            await page.wait_for_timeout(600)
         s=seed or random.randint(1,2**31-1)
         js=INJECT.replace("RAND_SEED",str(s))
         try: await page.evaluate(js)
         except: pass
-        log(f"  (re-injected hack seed={s})"); await page.wait_for_timeout(700)
+        log(f"  (re-injected hack seed={s})"); await page.wait_for_timeout(900)
+        # verify
+        try:
+            ok=await page.evaluate("() => !!window.__readCards")
+            if not ok: log("  re-inject failed still no __readCards")
+        except: pass
 
 best_overs=[999]
 async def one_draft(page, num):
@@ -447,7 +469,11 @@ async def main():
         await setup_route(page)
         await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
         await page.wait_for_timeout(3000)
-        await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
+        # FIX: use single fixed PID so all 500s stack under one leaderboard entry (otherwise 7+6+4 split)
+        # PID is stored as five-hundred-pid, generated by Ga() if missing
+        FIXED_PID = "k1387-" + HANDLE  # deterministic per handle, e.g. k1387-kunjan1387
+        await page.evaluate(f"() => {{ localStorage.setItem('five-hundred-handle','{HANDLE}'); localStorage.setItem('five-hundred-pid','{FIXED_PID}'); }}")
+        log(f"Fixed PID={FIXED_PID} for handle={HANDLE} (prevents split 7/6/4) ")
         ok_vo=await page.evaluate("() => !!window.__vo")
         log(f"Capture vo={ok_vo}")
         if not ok_vo: await browser.close(); return
@@ -460,9 +486,21 @@ async def main():
         log("Entered draft")
         wins=0
         for i in range(1, MAX_DRAFTS+1):
-            # allow STRATEGY env to switch per draft if needed
             won=await one_draft(page,i)
             if won: wins+=1
+            # check leaderboard every 10 wins or every 10 drafts
+            if wins>0 and wins%10==0:
+                try:
+                    pid=await page.evaluate("()=>localStorage.getItem('five-hundred-pid')")
+                    for win in ["today","week","club","alltime"]:
+                        try:
+                            txt=await page.evaluate(f"async (w)=>{{ try{{ const r=await fetch('https://500leaderboard.raasnhafiz.workers.dev/board?window='+w+'&id='+encodeURIComponent(localStorage.getItem('five-hundred-pid'))); const j=await r.json(); return JSON.stringify(j).slice(0,900); }}catch(e){{return 'err '+e}} }}", win)
+                            log(f"BOARD {win} after {wins} wins pid={pid[:8]}: {txt[:500]}")
+                        except Exception as e:
+                            log(f"board fetch {win} err {e}")
+                        await page.wait_for_timeout(400)
+                except Exception as e:
+                    log(f"board check err {e}")
         log(f"=== DONE {wins}/{MAX_DRAFTS} wins best {best_overs[0]} overs ===")
         await page.wait_for_timeout(3000); await browser.close()
 if __name__=="__main__": asyncio.run(main())

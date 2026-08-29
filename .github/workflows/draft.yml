@@ -18,11 +18,11 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - name: Run fastest drafter (<35 overs hunt, distinct cloud handle)
         env:
-          HANDLE: ${{ secrets.HANDLE_CLOUD || 'kunjan500' }}
+          HANDLE: ${{ secrets.HANDLE_CLOUD || 'kunjan700' }}
           MAX_DRAFTS: "30"     # 30 drafts per hour ≈ 50 min
           HOLD_SEC: "20"       # wait 20s after win then continue
-          TARGET_BALLS: "209"  # <210 = <35.0 overs
-          STOP_ON_TARGET: "0"  # keep looping, set 1 to stop on <35
+          TARGET_BALLS: "207"  # <208 = beat current World #1 208 (34.4 overs) for #1 FASTEST & MOST 500s
+          STOP_ON_TARGET: "0"  # keep looping hourly until #1 ALL-TIME + #1 MOST 500s
         run: xvfb-run --auto-servernum python spin_fastest.py
       - uses: actions/upload-artifact@v4
         if: always()
