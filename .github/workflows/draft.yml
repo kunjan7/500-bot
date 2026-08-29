@@ -16,14 +16,13 @@ jobs:
         with: { python-version: "3.11" }
       - run: pip install -r requirements.txt
       - run: python -m playwright install --with-deps chromium
-      - name: Run fastest drafter (<35 overs hunt, distinct cloud handle)
+      - name: Run freq drafter (<35 overs hunt, distinct cloud handle)
         env:
           HANDLE: ${{ secrets.HANDLE_CLOUD || 'kunjan700' }}
-          MAX_DRAFTS: "2"      # 2 drafts ≈ 2 min for rapid test
-          HOLD_SEC: "2"        # short hold for fast iteration
-          TARGET_BALLS: "207"  # <208 = beat current World #1 208 (34.4 overs) for #1 FASTEST & MOST 500s
-          STOP_ON_TARGET: "0"  # keep looping
-        run: xvfb-run --auto-servernum python spin_fastest.py
+          MAX_DRAFTS: "2"      # 2 drafts ≈ 2 min for rapid test (was 30/55m)
+          HOLD_SEC: "2"        # short hold
+          EXPLORE: "1"
+        run: xvfb-run --auto-servernum python spin_freq.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
