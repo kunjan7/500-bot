@@ -16,13 +16,12 @@ jobs:
         with: { python-version: "3.11" }
       - run: pip install -r requirements.txt
       - run: python -m playwright install --with-deps chromium
-      - name: Run freq drafter (<35 overs hunt, distinct cloud handle)
+      - name: Run FIXED11 drafter (infinite loop, 1000 drafts, 20s hold)
         env:
-          HANDLE: ${{ secrets.HANDLE_CLOUD || 'kunjan700' }}
-          MAX_DRAFTS: "30"     # 30 drafts ≈ 35 min - max tries for <208 (World #1) + stack MOST
-          HOLD_SEC: "2"
-          EXPLORE: "1"
-        run: xvfb-run --auto-servernum python spin_freq.py
+          HANDLE: ${{ secrets.HANDLE || 'kunjan700' }}
+          MAX_DRAFTS: "1000"   # infinite loop per run (55 min timeout ≈ 35 drafts)
+          HOLD_SEC: "20"       # 20s hold as earlier
+        run: xvfb-run --auto-servernum python spin_fixed11.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

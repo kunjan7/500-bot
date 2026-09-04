@@ -1,21 +1,18 @@
 """
-spin_serial.py — serial-wise forced XI as requested:
- 1 Rohit Sharma
- 2 Sachin Tendulkar
- 3 Virat Kohli
- 4 Viv Richards
- 5 AB de Villiers
- 6 Heinrich Klaasen (carles → Klaasen, freq P6 leader)
- 7 Shahid Afridi
- 8 Wasim Akram
- 9 Rashid Khan
-10 Malcolm Marshall
-11 Muttiah Muralitharan
-
-Fallback mode STRATEGY=stat :
- 1-3 highest BAT, 4-7 highest POW, 8-11 highest BWL (slot-specific)
+spin_serial.py — serial-wise forced XI with YEAR control:
+ (1, "Rohit Sharma", "india2020s"),
+    (2, "Sachin Tendulkar", "india2000s"),
+    (3, "Virat Kohli", "india2010s"),
+    (4, "Viv Richards", "westindies1980s"),
+    (5, "AB de Villiers", "southafrica2010s"),
+    (6, "Heinrich Klaasen", "southafrica2020s"),
+    (7, "Glenn Maxwell", "australia2020s"),
+    (8, "Malcolm Marshall", "westindies1980s"),
+    (9, "Shane Warne", "australia1990s"),
+    (10, "Muttiah Muralitharan", "srilanka2000s"),
+    (11, "Jasprit Bumrah", "india2020s"),
 """
-import asyncio, json, re, time, random, os, sys
+import asyncio, json, re, time, random, uuid, os, sys
 from pathlib import Path
 from playwright.async_api import async_playwright
 sys.stdout=open(sys.stdout.fileno(),mode="w",encoding="utf-8",buffering=1)
@@ -24,52 +21,53 @@ SHOTS_DIR=Path(__file__).parent/"shots_hack"; SHOTS_DIR.mkdir(exist_ok=True)
 HANDLE=os.getenv("HANDLE","kunjan1387")
 MAX_DRAFTS=int(os.getenv("MAX_DRAFTS","10"))
 HOLD_SEC=int(os.getenv("HOLD_SEC","20"))
-STRATEGY=os.getenv("STRATEGY","serial")  # serial or stat
+STRATEGY=os.getenv("STRATEGY","serial")
 
-# Serial XI — user request: Sachin/Virat/Viv/AB/Klaasen/Buttler/Afridi/Wasim/Malcolm/Shane/Murali (no Rohit)
+# ================== EDITABLE XI - CHANGE HERE ONLY ==================
 SERIAL_XI = [
-    (1, "Rohit Sharma"),
-    (2, "Sachin Tendulkar"),  # 2000 B95
-    (3, "Virat Kohli"),
-    (4, "Viv Richards"),
-    (5, "AB de Villiers"),
-    (6, "Heinrich Klaasen"),
-    (7, "Shahid Afridi"),
-    (8, "Wasim Akram"),
-    (9, "Shane Warne"),
-    (10, "Malcolm Marshall"),
-    (11, "Muttiah Muralitharan"),
+    (1, "Rohit Sharma", "india2020s"),
+    (2, "Sachin Tendulkar", "india2000s"), # B95 P88 - change to india1990s for B92 P91
+    (3, "Virat Kohli", "india2010s"),
+    (4, "Viv Richards", "westindies1980s"),
+    (5, "AB de Villiers", "southafrica2010s"),
+    (6, "Heinrich Klaasen", "southafrica2020s"),
+    (7, "Glenn Maxwell", "australia2020s"),
+    (8, "Malcolm Marshall", "westindies1980s"),
+    (9, "Shane Warne", "australia1990s"),
+    (10, "Muttiah Muralitharan", "srilanka2000s"), # FIXED - was landing srilanka2010s -> Malinga
+    (11, "Jasprit Bumrah", "india2020s"),
 ]
-# Alternative pure stat slots (user's second request): 1-3 BAT, 4-7 POW, 8-11 BWL
-# kept as STRATEGY=stat_simple mode below
-# For stat mode: slot ranges
+# ====================================================================
+
 def stat_for_slot(slot, p):
-    # p = {b,p,bl}
-    if 1 <= slot <= 3:
-        return p.get("b",0)  # highest BAT
-    if 4 <= slot <= 7:
-        return p.get("p",0)  # highest POW
-    if 8 <= slot <= 11:
-        return p.get("bl",0) # highest BWL
+    if 1 <= slot <= 3: return p.get("b",0)
+    if 4 <= slot <= 7: return p.get("p",0)
+    if 8 <= slot <= 11: return p.get("bl",0)
     return 0
 
-FREQ_JSON=json.dumps({"_":"_"}) # placeholder not needed but inject
-
+forced_seed = None
+forced_sid = None
 def log(m): print(f"[{time.strftime('%H:%M:%S')}] {m}", flush=True)
 
 async def setup_route(page):
-    # capture seed sid for manual submit fallback
     async def seed_cap(route):
+        global forced_seed, forced_sid
+        if forced_seed is not None:
+            import json, uuid
+            sid = forced_sid or str(uuid.uuid4())
+            body=json.dumps({"sid": sid, "seed": forced_seed})
+            log(f"  [SEED FORCED] sid={sid[:8]} seed={forced_seed}")
+            await route.fulfill(status=200, body=body, content_type="application/json")
+            return
         resp=await route.fetch()
         try:
             txt=await resp.text()
-            # store sid globally: response is {sid, seed}
             try:
                 import json as _js
                 data=_js.loads(txt)
                 if "sid" in data:
                     await page.evaluate(f"() => {{ window.__lastSid='{data.get('sid','')}' ; window.__lastSeed='{data.get('seed','')}' }}")
-                    log(f"  [SEED] sid={data.get('sid','')[:12]}.. seed={str(data.get('seed',''))[:8]}")
+                    log(f"  [SEED] sid={data.get('sid','')[:12]}..")
             except: pass
             await route.fulfill(response=resp, body=txt, content_type=resp.headers.get("content-type","application/json"))
         except:
@@ -107,7 +105,22 @@ INJECT=r"""
  window.__h={on:true, idx:-1, poolSz:1, overrideReady:false, picked:[], openSlots:[1,2,3,4,5,6,7,8,9,10,11], usage:{}, targetName:null};
  window.__reseed=(s)=>{_s=s|0;};
  Math.random=function(){const h=window.__h; if(!h.on) return _orig(); if(h.overrideReady&&h.idx>=0){const sz=(window.__gamePool||[]).length||h.poolSz; const v=(h.idx+0.5)/sz; h.idx=-1; h.overrideReady=false; return Math.min(Math.max(v,1e-6),0.999999);} return _prng();};
- // serial chooser: given desired player name, find pool team containing that player that fits desired slot
+ window.__chooseTeamExact = function(desiredSquadId, desiredSlot){
+   const vo=window.__vo, h=window.__h; if(!vo||!h) return null;
+   const picked=new Set(h.picked.map(x=>x.name)); const K2=window.__K2||2;
+   const pool=vo.filter(t=>{
+     if(!t.players.some(p=>!picked.has(p.n) && h.openSlots.some(s=>s>=p.r[0]&&s<=p.r[1]))) return false;
+     if((h.usage[t.id]||0)>=K2) return false; return true;
+   });
+   if(!pool.length) return null;
+   const pIdx = pool.findIndex(t=> t.id===desiredSquadId);
+   if(pIdx>=0){
+     const t=pool[pIdx];
+     const hasSlot = t.players.some(p=> !picked.has(p.n) && p.r[0]<=desiredSlot && desiredSlot<=p.r[1]);
+     if(hasSlot) return {idx: pIdx, poolSize: pool.length, team: t.name+" "+t.season, score:999};
+   }
+   return null;
+ };
  window.__chooseTeamSerial = function(desiredName, desiredSlot){
    const vo=window.__vo, h=window.__h; if(!vo||!h) return null;
    const picked=new Set(h.picked.map(x=>x.name)); const K2=window.__K2||2;
@@ -117,7 +130,6 @@ INJECT=r"""
    });
    if(!pool.length) return null;
    const want = desiredName.trim().toLowerCase();
-   // special: Sachin → force india_2000s (highest BAT 95 as requested)
    const wantSachin = want.includes("sachin");
    let candidates=[];
    pool.forEach((t,i)=>{
@@ -130,19 +142,16 @@ INJECT=r"""
    });
    if(candidates.length){
      candidates.sort((a,b)=>{
-       // Sachin: prefer india_2000s (B95) as requested
-       if(wantSachin){ // prefer 1990 as requested
-         const want1990=true;
-         const aIs2000 = (a.t.season||"").includes("1990") || (a.t.id||"").includes("1990");
-         const bIs2000 = (b.t.season||"").includes("1990") || (b.t.id||"").includes("1990");
+       if(wantSachin){
+         const aIs2000 = (a.t.season||"").includes("2000") || (a.t.id||"").includes("2000");
+         const bIs2000 = (b.t.season||"").includes("2000") || (b.t.id||"").includes("2000");
          if(aIs2000 && !bIs2000) return -1;
          if(!aIs2000 && bIs2000) return 1;
        }
        const pa=a.t.players.find(p=>p.n.toLowerCase()===want || p.n.toLowerCase().includes(want));
        const pb=b.t.players.find(p=>p.n.toLowerCase()===want || p.n.toLowerCase().includes(want));
        if(!pa||!pb) return 0;
-       // for Sachin sort by BAT+POW, otherwise by total
-       if(wantSachin) return (pb.b+pb.p)-(pa.b+pa.p);
+       if(wantSachin) return (pb.b+pb.p)-(pa.b+pa.p) || pb.b-pa.b;
        return (pb.b+pb.p+pb.bl)-(pa.b+pa.p+pa.bl);
      });
      const c=candidates[0];
@@ -159,9 +168,9 @@ INJECT=r"""
    });
    if(!pool.length) return null;
    function slotStat(p, slot){
-     if(slot>=1&&slot<=3) return p.b;          // 1-3 BAT
-     if(slot>=4&&slot<=7) return p.p;          // 4-7 POW
-     if(slot>=8&&slot<=11) return p.bl;        // 8-11 BWL
+     if(slot>=1&&slot<=3) return p.b;
+     if(slot>=4&&slot<=7) return p.p;
+     if(slot>=8&&slot<=11) return p.bl;
      return 0;
    }
    let bestI=-1, bestS=-1, bestN="";
@@ -171,9 +180,6 @@ INJECT=r"""
        if(picked.has(p.n)) continue;
        if(p.r[0]<=desiredSlot && desiredSlot<=p.r[1]){
          const s=slotStat(p, desiredSlot);
-         // for Sachin, prefer highest BAT+POW variant if names equal
-         const tie = p.b + p.p;
-         const cur = ms + (ms>=0?0:0);
          if(s>ms) ms=s;
        }
      }
@@ -181,13 +187,6 @@ INJECT=r"""
    });
    if(bestI<0) return null;
    return {idx:bestI, poolSize:pool.length, team:bestN, score:bestS};
- };
- // Sachin highest BAT+POW helper: choose best Sachin variant by b+p
- window.__pickBestSachin = function(cards){
-   const sachins=cards.filter(c=>c.name.toLowerCase().includes("sachin"));
-   if(!sachins.length) return null;
-   sachins.sort((a,b)=>(b.b+b.p)-(a.b+a.p));
-   return sachins[0];
  };
  window.__readCards=function(){
    const out=[]; const seen=new Set();
@@ -222,7 +221,6 @@ async def ensure_hack(page, seed=None):
         try: await page.evaluate(js)
         except: pass
         log(f"  (re-injected hack seed={s})"); await page.wait_for_timeout(900)
-        # verify
         try:
             ok=await page.evaluate("() => !!window.__readCards")
             if not ok: log("  re-inject failed still no __readCards")
@@ -231,7 +229,6 @@ async def ensure_hack(page, seed=None):
 best_overs=[999]
 async def one_draft(page, num):
     log(f"=== DRAFT #{num} [{STRATEGY}] ===")
-    # wait for draft screen
     for _ in range(8):
         try:
             if await page.locator("button").filter(has_text=re.compile(r"^SPIN$",re.I)).first.is_visible(timeout=800): break
@@ -246,20 +243,28 @@ async def one_draft(page, num):
         try: await page.evaluate("() => { const h=window.__h; h.picked=[]; h.openSlots=[1,2,3,4,5,6,7,8,9,10,11]; h.usage={}; }"); break
         except Exception as e: log(f"  retry hack init {attempt+1}: {e}"); await ensure_hack(page, seed=new_seed); await page.wait_for_timeout(800)
     picks=[]
-    # choose targets
     if STRATEGY=="serial":
         targets=SERIAL_XI
-    else: # stat mode: generate targets per slot using stat logic (slot = position)
-        targets=[(i, f"STAT_SLOT_{i}") for i in range(1,12)]
+    else:
+        targets=[(i, f"STAT_SLOT_{i}", None) for i in range(1,12)]
 
-    for idx_slot, (slot, wantName) in enumerate(targets):
-        # limit to 11 spins but allow re-spin if desired player not in pool (try up to 2 rerolls via next team)
+    for idx_slot, t in enumerate(targets):
+        if len(t)==3: slot, wantName, wantSquad = t
+        elif len(t)==2: slot, wantName = t; wantSquad = None
+        else: continue
         found=False
         for attempt in range(3):
             if STRATEGY=="serial":
-                safeWant=json.dumps(wantName)
-                result=await page.evaluate(f"() => window.__chooseTeamSerial({safeWant}, {slot})")
-                mode=f"serial:{wantName} at {slot}"
+                if wantSquad:
+                    result=await page.evaluate(f"() => window.__chooseTeamExact({json.dumps(wantSquad)}, {slot})")
+                    mode=f"exact:{wantSquad} for {wantName} at {slot}"
+                    if not result:
+                        result=await page.evaluate(f"() => window.__chooseTeamSerial({json.dumps(wantName)}, {slot})")
+                        mode=f"serial-fallback:{wantName} at {slot}"
+                else:
+                    safeWant=json.dumps(wantName)
+                    result=await page.evaluate(f"() => window.__chooseTeamSerial({safeWant}, {slot})")
+                    mode=f"serial:{wantName} at {slot}"
             else:
                 result=await page.evaluate(f"() => window.__chooseTeamStat({slot})")
                 mode=f"stat slot {slot}"
@@ -277,17 +282,15 @@ async def one_draft(page, num):
                     except: pass
                 cards=await page.evaluate("() => window.__readCards()")
                 if not cards: log("    no cards"); continue
-                # pick desired card
                 best=None
                 if STRATEGY=="serial":
                     wantLower=wantName.lower()
-                    # Sachin: pick variant with highest BAT+POW (user request)
                     if "sachin" in wantLower:
                         cands=[c for c in cards if "sachin" in c["name"].lower() and not c.get("disabled")]
                         if cands:
-                            cands.sort(key=lambda x: x.get("b",0)+x.get("p",0), reverse=True)
+                            cands.sort(key=lambda x: (x.get("b",0)+x.get("p",0), x.get("b",0)), reverse=True)
                             best=cands[0]
-                            log(f"    Sachin pick highest BAT+POW: {best['name']} B{best.get('b',0)} P{best.get('p',0)} sum={best.get('b',0)+best.get('p',0)}")
+                            log(f"    Sachin pick highest BAT+POW: {best['name']} B{best.get('b',0)} P{best.get('p',0)}")
                     else:
                         for c in cards:
                             if c["name"].lower()==wantLower and not c.get("disabled"):
@@ -297,7 +300,6 @@ async def one_draft(page, num):
                                 if wantLower in c["name"].lower() and not c.get("disabled"):
                                     best=c; break
                     if not best:
-                        # fallback: stat best for this slot
                         scored=[]
                         for c in cards:
                             if c.get("disabled"): continue
@@ -311,14 +313,12 @@ async def one_draft(page, num):
                             log(f"    no candidate for {wantName}, retrying spin")
                             continue
                 else:
-                    # stat mode: pick highest stat for slot among cards that fit slot
                     scored=[]
                     for c in cards:
                         if c.get("disabled"): continue
                         if not (c["lo"]<=slot<=c["hi"]): continue
                         s=stat_for_slot(slot, c)
                         scored.append((s,c))
-                    # if none fit slot, pick any highest stat for slot
                     if not scored:
                         for c in cards:
                             if c.get("disabled"): continue
@@ -330,7 +330,6 @@ async def one_draft(page, num):
                     log("    no best found"); continue
                 log(f"    -> {best['name']} ({best['role']} B{best.get('b',0)} P{best.get('p',0)} BL{best.get('bl',0)}) want {wantName} slot {slot}")
                 btns=page.locator("button"); await btns.nth(best["btnIdx"]).click(timeout=3000); await page.wait_for_timeout(1000)
-                # position popup: click desired slot if available
                 digits=await page.evaluate(r"""() => {
                     const dlg=[...document.querySelectorAll('div')].find(d=>d.className&&String(d.className).includes('fixed')&&/Choose a batting position/i.test(d.textContent||'')&&d.querySelector('button'));
                     const root=dlg||document; const out=[];
@@ -350,24 +349,20 @@ async def one_draft(page, num):
                         await page.wait_for_timeout(500)
                 picks.append({"name":best["name"],"slot":slot,"b":best.get("b",0),"p":best.get("p",0),"bl":best.get("bl",0)})
                 safe=best["name"].replace("'","\\'")
-                await page.evaluate(f"() => {{ const h=window.__h; h.picked.push({{name:'{safe}'}}); const idx=h.openSlots.indexOf({slot}); if(idx>=0) h.openSlots.splice(idx,1); else if(h.openSlots.length) h.openSlots.shift(); }}")
+                sid_for_pick = sel["id"] if sel else ""
+                await page.evaluate(f"() => {{ const h=window.__h; h.picked.push({{name:'{safe}', squadId:'{sid_for_pick}'}}); const idx=h.openSlots.indexOf({slot}); if(idx>=0) h.openSlots.splice(idx,1); else if(h.openSlots.length) h.openSlots.shift(); }}")
                 found=True
                 break
             else:
                 log(f"  no team for {wantName} slot {slot}, trying fallback stat")
-                # fallback: try stat team
                 result2=await page.evaluate(f"() => window.__chooseTeamStat({slot})")
                 if result2:
                     log(f"  fallback stat team {result2['team']}")
-                    # retry with stat team by forcing desiredName to empty? Just use stat team directly
-                    # we can treat as serial miss and use stat team's best card
-                    # Instead, force spin to stat team
                     await page.evaluate(f"() => {{ const h=window.__h; h.idx={result2['idx']}; h.poolSz={result2['poolSize']}; h.overrideReady=true; }}")
                     spin_btn=page.locator("button").filter(has_text=re.compile(r"^SPIN$",re.I)).first
                     if await spin_btn.is_visible(timeout=3000):
                         await spin_btn.click(timeout=5000); await page.wait_for_timeout(2500)
                         cards=await page.evaluate("() => window.__readCards()")
-                        # pick best stat for slot
                         scored=[]
                         for c in cards:
                             if c.get("disabled"): continue
@@ -406,6 +401,8 @@ async def one_draft(page, num):
         if len(picks)>=11: break
     log(f"  Draft picks: {[(p['slot'],p['name']) for p in picks]}")
     for p in picks: log(f"    {p['slot']}: {p['name']} B{p['b']} P{p['p']} BL{p['bl']}")
+    global forced_seed, forced_sid
+    forced_seed=None; forced_sid=None
     log("  Simulating...")
     sim=page.locator("button").filter(has_text=re.compile(r"SIMULATE",re.I)).first
     if await sim.is_visible(timeout=5000):
@@ -459,9 +456,8 @@ async def one_draft(page, num):
     return False
 
 async def main():
-    strat = "serial Serial XI: " + ", ".join([f"{s}:{n}" for s,n in SERIAL_XI])
+    strat = "serial Serial XI: " + ", ".join([f"{s}:{n}({sq})" for s,n,sq in SERIAL_XI])
     log(f"spin_serial.py — HANDLE={HANDLE} MAX_DRAFTS={MAX_DRAFTS} {strat}")
-    log(f"Alternative stat: 1-3 BAT, 4-7 POW, 8-11 BWL")
     async with async_playwright() as pw:
         browser=await pw.chromium.launch(headless=False, args=["--window-size=480,1000"])
         ctx=await browser.new_context(viewport={"width":480,"height":1000}, device_scale_factor=2)
@@ -469,11 +465,9 @@ async def main():
         await setup_route(page)
         await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
         await page.wait_for_timeout(3000)
-        # FIX: use single fixed PID so all 500s stack under one leaderboard entry (otherwise 7+6+4 split)
-        # PID is stored as five-hundred-pid, generated by Ga() if missing
-        FIXED_PID = "k1387-" + HANDLE  # deterministic per handle, e.g. k1387-kunjan1387
+        FIXED_PID = "k1387-" + HANDLE
         await page.evaluate(f"() => {{ localStorage.setItem('five-hundred-handle','{HANDLE}'); localStorage.setItem('five-hundred-pid','{FIXED_PID}'); }}")
-        log(f"Fixed PID={FIXED_PID} for handle={HANDLE} (prevents split 7/6/4) ")
+        log(f"Fixed PID={FIXED_PID} for handle={HANDLE}")
         ok_vo=await page.evaluate("() => !!window.__vo")
         log(f"Capture vo={ok_vo}")
         if not ok_vo: await browser.close(); return
@@ -488,7 +482,6 @@ async def main():
         for i in range(1, MAX_DRAFTS+1):
             won=await one_draft(page,i)
             if won: wins+=1
-            # check leaderboard every 10 wins or every 10 drafts
             if wins>0 and wins%10==0:
                 try:
                     pid=await page.evaluate("()=>localStorage.getItem('five-hundred-pid')")
