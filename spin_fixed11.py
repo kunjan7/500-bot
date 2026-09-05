@@ -286,7 +286,8 @@ async def one_draft(page, num):
                 }}""")
                 await asyncio.sleep(0.5)
         picks.append({"name":best["name"],"b":best.get("b",0),"p":best.get("p",0),"bl":best.get("bl",0)})
-        await page.evaluate(f"() => {{ const h=window.__h; h.picked.push({{name:'{best['name'].replace(\"'\",\"\\\\'\")}'}}); if(h.openSlots.length) h.openSlots.shift(); }}")
+        safe = best["name"].replace("'", "\\'")
+        await page.evaluate(f"() => {{ const h=window.__h; h.picked.push({{name:'{safe}'}}); if(h.openSlots.length) h.openSlots.shift(); }}")
         if len(picks)>=11:
             log("  All 11 fixed picked! " + ", ".join([p["name"] for p in picks]))
             break
