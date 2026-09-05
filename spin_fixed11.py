@@ -16,9 +16,9 @@ SHOTS_DIR = Path(__file__).parent / "shots_fixed11"
 SHOTS_DIR.mkdir(exist_ok=True)
 
 HANDLE = os.getenv("HANDLE", "kumar6071")
-MAX_DRAFTS = int(os.getenv("MAX_DRAFTS", "50"))
-HOLD_SEC = int(os.getenv("HOLD_SEC", "30"))
-SEED_DELAY = float(os.getenv("SEED_DELAY", "5"))
+MAX_DRAFTS = int(os.getenv("MAX_DRAFTS", "20"))
+HOLD_SEC = int(os.getenv("HOLD_SEC", "10"))
+SEED_DELAY = float(os.getenv("SEED_DELAY", "2"))
 
 FIXED_XI = [
     (1, "Rohit Sharma"), (2, "Sachin Tendulkar"), (3, "Virat Kohli"),
@@ -51,6 +51,8 @@ def gen_pid():
 
 async def api_seed(page, pid):
     """Register team with leaderboard via POST /seed, return sid or None."""
+    xi_payload = [{"n": p["name"], "sq": p.get("squadId", "")} for p in current_picks]
+    log(f"  SEED xi sample: {json.dumps(xi_payload[:3])}... ({len(xi_payload)} players)")
     for attempt in range(3):
         try:
             result = await page.evaluate(r"""async (params) => {
@@ -68,7 +70,7 @@ async def api_seed(page, pid):
                 } catch(e) {
                     return {ok: false, error: e.message};
                 }
-            }""", {"pid": pid, "handle": HANDLE, "xi": [{"n": p["name"], "sq": p.get("squadId", "")} for p in current_picks]})
+            }""", {"pid": pid, "handle": HANDLE, "xi": xi_payload})
             if result.get("ok"):
                 sid = result.get("data", {}).get("sid", "")
                 log(f"  SEED ok sid={sid[:20]}...")
@@ -133,6 +135,58 @@ def map_role_from_card(card):
     if r == "ALL-ROUNDER": return "AR"
     if r == "BOWLER": return "BWL"
     return "BAT"
+
+async def get_squad_id(page, player_name):
+    """Search __No for a player and return the first matching team's ID."""
+    escaped = player_name.replace("'", "\\'")
+    try:
+        return await page.evaluate(f"""() => {{
+            const No = window.__No;
+            if (!No) return '';
+            for (const t of No) {{
+                if (t.players && t.players.some(p => p.n === '{escaped}')) return t.id;
+            }}
+            return '';
+        }}""")
+    except:
+        return ''
+
+async def api_seed_no_xi(page, pid):
+    """Register with leaderboard via POST /seed without xi (fallback)."""
+    for attempt in range(3):
+        try:
+            result = await page.evaluate(r"""async (params) => {
+                const {pid, handle} = params;
+                try {
+                    const resp = await fetch('""" + LB_URL + r"""/seed', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({id: pid, handle: handle})
+                    });
+                    const text = await resp.text();
+                    if (resp.status === 429) return {ok: false, retry: true, status: 429};
+                    if (!resp.ok) return {ok: false, status: resp.status, text: text};
+                    return {ok: true, data: JSON.parse(text)};
+                } catch(e) {
+                    return {ok: false, error: e.message};
+                }
+            }""", {"pid": pid, "handle": HANDLE})
+            if result.get("ok"):
+                sid = result.get("data", {}).get("sid", "")
+                log(f"  SEED (no xi) ok sid={sid[:20]}...")
+                return sid
+            elif result.get("retry"):
+                wait = 30 * (attempt + 1)
+                log(f"  SEED (no xi) rate limited (429), waiting {wait}s...")
+                await page.wait_for_timeout(wait * 1000)
+                continue
+            else:
+                log(f"  SEED (no xi) failed: {result}")
+                return None
+        except Exception as e:
+            log(f"  SEED (no xi) err: {e}")
+            return None
+    return None
 
 async def setup_route_interception(page):
     async def lb_log(route):
@@ -490,7 +544,10 @@ async def one_draft(page, num):
                 }}""")
                 await asyncio.sleep(0.5)
 
-        pick_entry = {"name": best["name"], "b": best.get("b", 0), "p": best.get("p", 0), "bl": best.get("bl", 0), "role": map_role_from_card(best), "squadId": last_squad_id}
+        squad_id = await get_squad_id(page, best["name"])
+        if not squad_id:
+            squad_id = last_squad_id
+        pick_entry = {"name": best["name"], "b": best.get("b", 0), "p": best.get("p", 0), "bl": best.get("bl", 0), "role": map_role_from_card(best), "squadId": squad_id}
         picks.append(pick_entry)
         current_picks.append(pick_entry)
         try:
@@ -513,6 +570,9 @@ async def one_draft(page, num):
     await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
     await asyncio.sleep(SEED_DELAY)
     current_sid = await api_seed(page, draft_pid)
+    if not current_sid:
+        log("  SEED with xi failed, trying without xi...")
+        current_sid = await api_seed_no_xi(page, draft_pid)
     await asyncio.sleep(SEED_DELAY)
 
     log("  Simulating...")
@@ -573,21 +633,30 @@ async def one_draft(page, num):
                                     }
                                 } catch(e) {}
                             }
+                            try {
+                                const r = await fetch('""" + LB_URL + r"""/count?window=today');
+                                if (r.ok) {
+                                    const d = await r.json();
+                                    const entries = d.top || [];
+                                    const idx = entries.findIndex(e => e.handle === handle);
+                                    if (idx >= 0) out['count'] = {rank: idx+1, wins: entries[idx].v};
+                                    else out['count'] = null;
+                                }
+                            } catch(e) {}
                             return out;
                         }""", {"handle": HANDLE})
                         today_e = lb_check.get("today")
                         most_e = lb_check.get("most")
-                        if today_e and most_e:
-                            log(f"  CONFIRMED! today #{today_e['rank']} ({today_e['balls']} balls) most #{most_e['rank']} ({most_e['balls']} balls)")
+                        count_e = lb_check.get("count")
+                        if today_e or count_e:
+                            parts = []
+                            if today_e: parts.append(f"fastest #{today_e['rank']} ({today_e['balls']} balls)")
+                            if count_e: parts.append(f"most 500s #{count_e['rank']} ({count_e['wins']} wins)")
+                            log(f"  CONFIRMED! {', '.join(parts)}")
                             confirmed = True
                             break
                         else:
-                            parts = []
-                            if today_e: parts.append(f"today #{today_e['rank']}")
-                            else: parts.append("today pending")
-                            if most_e: parts.append(f"most #{most_e['rank']}")
-                            else: parts.append("most pending")
-                            log(f"  Poll {poll+1}/20: {', '.join(parts)}")
+                            log(f"  Poll {poll+1}/20: pending...")
                     except Exception as e:
                         log(f"  Poll {poll+1} err: {e}")
                 if not confirmed:
@@ -689,8 +758,9 @@ async def main():
         log("=== LEADERBOARD VERIFICATION ===")
         try:
             import urllib.request
-            for window in ["today", "most"]:
-                url = f"{LB_URL}/board?window={window}"
+            for endpoint in [("board", "today"), ("board", "most"), ("count", "today")]:
+                kind, window = endpoint
+                url = f"{LB_URL}/{kind}?window={window}"
                 req = urllib.request.Request(url)
                 resp = urllib.request.urlopen(req, timeout=15)
                 data = json.loads(resp.read())
@@ -698,9 +768,12 @@ async def main():
                 found = [e for e in entries if e.get("handle") == HANDLE]
                 if found:
                     e = found[0]
-                    log(f"  {window}: #{entries.index(e)+1} handle={e['handle']} balls={e['balls']} runs={e['runs']}")
+                    if kind == "count":
+                        log(f"  {kind}/{window}: handle={e['handle']} wins={e.get('v',0)}")
+                    else:
+                        log(f"  {kind}/{window}: #{entries.index(e)+1} handle={e['handle']} balls={e['balls']} runs={e['runs']}")
                 else:
-                    log(f"  {window}: NOT FOUND in top {len(entries)}")
+                    log(f"  {kind}/{window}: NOT FOUND in top {len(entries)}")
         except Exception as e:
             log(f"  verification err: {e}")
 
