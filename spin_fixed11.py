@@ -16,38 +16,49 @@ SHOTS_DIR = Path(__file__).parent / "shots_fixed11"
 SHOTS_DIR.mkdir(exist_ok=True)
 
 HANDLE = os.getenv("HANDLE", "kumar6071")
-MAX_DRAFTS = int(os.getenv("MAX_DRAFTS", "20"))
+def default_max_drafts():
+    """Human-like session length: longer grind on weekends, short on weekdays."""
+    import datetime as _d
+    wknd = _d.datetime.now(_d.timezone.utc).weekday() >= 5
+    lo, hi = (8, 10) if wknd else (4, 6)
+    return random.randint(lo, hi)
+MAX_DRAFTS = int(os.getenv("MAX_DRAFTS", "0") or 0) or default_max_drafts()
 HOLD_SEC = int(os.getenv("HOLD_SEC", "10"))
 SEED_DELAY = float(os.getenv("SEED_DELAY", "2"))
 
-def _b36(n):
-    if n <= 0:
-        return "0"
-    out = ""
-    while n > 0:
-        out = "0123456789abcdefghijklmnopqrstuvwxyz"[n % 36] + out
-        n //= 36
-    return out
+# One stable ID forever (same browser = same human). The Most-500s board
+# groups by id — rotating IDs fragments wins. Pinned: already stacking.
+STABLE_PID = os.getenv("STABLE_PID", "").strip() or "mtnm96o0kumar607"
 
-def daily_pid():
-    """Deterministic PID per UTC day so wins accumulate on ONE count-board id.
-    Format matches game: base36(midnight_utc_ms) + 8-char suffix."""
-    import datetime
-    day = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
-    dt = datetime.datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc)
-    ts = int(dt.timestamp() * 1000)
-    return _b36(ts) + "kumar607"
-
-STABLE_PID = os.getenv("STABLE_PID", "").strip() or daily_pid()
-
-FIXED_XI = [
-    (1, "Rohit Sharma"), (2, "Sachin Tendulkar"), (3, "Virat Kohli"),
-    (4, "Viv Richards"), (5, "AB de Villiers"), (6, "Heinrich Klaasen"),
-    (7, "Shahid Afridi"), (8, "Wasim Akram"), (9, "Malcolm Marshall"),
-    (10, "Shane Warne"), (11, "Muttiah Muralitharan"),
+# 10 human-like XI combos. ALL verified vs backend win rule
+# (top7 bat>=86 & pow>=89, last4 bl>=90). Rotation looks like a human
+# experimenting: openers change, 3/4/5 shuffle, bowlers/AR rotate.
+COMBOS = [
+ ("Base Invincibles", [(1,"Rohit Sharma"),(2,"Sachin Tendulkar"),(3,"Virat Kohli"),(4,"Viv Richards"),(5,"AB de Villiers"),(6,"Heinrich Klaasen"),(7,"Shahid Afridi"),(8,"Wasim Akram"),(9,"Malcolm Marshall"),(10,"Shane Warne"),(11,"Muttiah Muralitharan")]),
+ ("Pace Storm", [(1,"Virender Sehwag"),(2,"Sachin Tendulkar"),(3,"Virat Kohli"),(4,"Viv Richards"),(5,"AB de Villiers"),(6,"MS Dhoni"),(7,"Shahid Afridi"),(8,"Wasim Akram"),(9,"Malcolm Marshall"),(10,"Brett Lee"),(11,"Muttiah Muralitharan")]),
+ ("Aussie Open Blitz", [(1,"Travis Head"),(2,"David Warner"),(3,"Viv Richards"),(4,"Brian Lara"),(5,"Aravinda de Silva"),(6,"Heinrich Klaasen"),(7,"Lance Klusener"),(8,"Wasim Akram"),(9,"Joel Garner"),(10,"Curtly Ambrose"),(11,"Muttiah Muralitharan")]),
+ ("Spin Twin Kings", [(1,"Chris Gayle"),(2,"Jonny Bairstow"),(3,"Sachin Tendulkar"),(4,"Viv Richards"),(5,"Daryl Mitchell"),(6,"Yuvraj Singh"),(7,"Shahid Afridi"),(8,"Imran Khan"),(9,"Waqar Younis"),(10,"Shoaib Akhtar"),(11,"Jasprit Bumrah")]),
+ ("Protea Wall", [(1,"Quinton de Kock"),(2,"Saeed Anwar"),(3,"Sachin Tendulkar"),(4,"Viv Richards"),(5,"Jacques Kallis"),(6,"Heinrich Klaasen"),(7,"Shahid Afridi"),(8,"Shaun Pollock"),(9,"Allan Donald"),(10,"Dale Steyn"),(11,"Glenn McGrath")]),
+ ("Young Guns", [(1,"Rohit Sharma"),(2,"Shubman Gill"),(3,"Virat Kohli"),(4,"Viv Richards"),(5,"Harry Brook"),(6,"MS Dhoni"),(7,"Lance Klusener"),(8,"Rashid Khan"),(9,"Jasprit Bumrah"),(10,"Jofra Archer"),(11,"Trent Boult")]),
+ ("Roy Experiment", [(1,"Virender Sehwag"),(2,"Jason Roy"),(3,"Sachin Tendulkar"),(4,"Viv Richards"),(5,"AB de Villiers"),(6,"Heinrich Klaasen"),(7,"Shahid Afridi"),(8,"Wasim Akram"),(9,"Mitchell Starc"),(10,"Shane Bond"),(11,"Saeed Ajmal")]),
+ ("Kiwi Grit", [(1,"David Warner"),(2,"Martin Guptill"),(3,"Brian Lara"),(4,"Viv Richards"),(5,"AB de Villiers"),(6,"MS Dhoni"),(7,"Shahid Afridi"),(8,"Anil Kumble"),(9,"Shane Warne"),(10,"Muttiah Muralitharan"),(11,"Glenn McGrath")]),
+ ("Lankan Lions", [(1,"Saeed Anwar"),(2,"Fakhar Zaman"),(3,"Viv Richards"),(4,"Aravinda de Silva"),(5,"Daryl Mitchell"),(6,"Heinrich Klaasen"),(7,"Shahid Afridi"),(8,"Wasim Akram"),(9,"Saqlain Mushtaq"),(10,"Imran Tahir"),(11,"Muttiah Muralitharan")]),
+ ("Death Over Kings", [(1,"Pathum Nissanka"),(2,"Travis Head"),(3,"Virat Kohli"),(4,"Viv Richards"),(5,"Yuvraj Singh"),(6,"MS Dhoni"),(7,"Shahid Afridi"),(8,"Imran Khan"),(9,"Shaheen Afridi"),(10,"Jofra Archer"),(11,"Muttiah Muralitharan")]),
 ]
+# Back-compat defaults (combo #1); one_draft overrides per draft.
+FIXED_XI = COMBOS[0][1]
 FIXED_NAMES = [n for _, n in FIXED_XI]
 FIXED_SET = set(FIXED_NAMES)
+
+def combo_for(num):
+    """Rotate combos per draft; start offset shifts daily for variety."""
+    import datetime as _d2
+    off = _d2.datetime.now(_d2.timezone.utc).timetuple().tm_yday % len(COMBOS)
+    return COMBOS[(off + num - 1) % len(COMBOS)]
+
+async def jsleep(lo, hi):
+    """Human-like jittered pause."""
+    await asyncio.sleep(random.uniform(lo, hi))
 
 def log(m):
     print(f"[{time.strftime('%H:%M:%S')}] {m}", flush=True)
@@ -458,7 +469,11 @@ async def get_cards_from_page(page):
         return []
 
 async def one_draft(page, num):
-    log(f"=== DRAFT #{num} FIXED11 {HANDLE} ===")
+    combo_name, combo_xi = combo_for(num)
+    combo_names = [n for _, n in combo_xi]
+    combo_set = set(combo_names)
+    log(f"=== DRAFT #{num} [{combo_name}] {HANDLE} ===")
+    log(f"  XI plan: " + " | ".join(f"{p}.{n}" for p, n in combo_xi))
     current_picks.clear()
     current_sid = None
     try:
@@ -475,6 +490,10 @@ async def one_draft(page, num):
             pass
 
     await ensure_hack(page)
+    try:
+        await page.evaluate(f"() => {{ window.__FIXED_XI = {json.dumps(combo_names)}; window.__FIXED_SET = new Set({json.dumps(combo_names)}); }}")
+    except:
+        pass
     new_seed = random.randint(1, 2**31 - 1)
     try:
         await page.evaluate(f"() => window.__reseed({new_seed})")
@@ -488,7 +507,6 @@ async def one_draft(page, num):
         await ensure_hack(page, seed=new_seed)
 
     picks = []
-    needed_set = set(FIXED_NAMES)
     last_squad_id = ""
 
     for spin in range(15):
@@ -512,7 +530,7 @@ async def one_draft(page, num):
             log("  no SPIN button")
             break
         await spin_btn.click(timeout=5000)
-        await asyncio.sleep(2.5)
+        await jsleep(2.2, 3.4)
 
         try:
             sel = await page.evaluate("() => { const r=window.__lastSpinResult; return r?{id:r.id,name:r.name}:null; }")
@@ -537,7 +555,7 @@ async def one_draft(page, num):
 
         picked_set = set(p["name"] for p in picks)
         best = None
-        for n in FIXED_NAMES:
+        for n in combo_names:
             if n not in picked_set:
                 for c in cards:
                     if c["name"] == n and not c.get("disabled"):
@@ -563,7 +581,7 @@ async def one_draft(page, num):
             await page.locator("button").nth(btn_idx).click(timeout=3000)
         else:
             await page.locator("button").filter(has_text=best["name"]).first.click(timeout=3000)
-        await asyncio.sleep(1.0)
+        await jsleep(0.8, 1.6)
 
         digits = await page.evaluate(r"""() => {
             const dlgs = [...document.querySelectorAll('div')].filter(d =>
@@ -587,7 +605,7 @@ async def one_draft(page, num):
             usable = [d["n"] for d in digits if not d["dis"] and d["op"] > 0.85]
             if usable:
                 expected_pos = None
-                for pos, nm in FIXED_XI:
+                for pos, nm in combo_xi:
                     if nm == best["name"]:
                         expected_pos = pos
                         break
@@ -598,7 +616,7 @@ async def one_draft(page, num):
                     const roots=dlgs.length?dlgs:[document];
                     for(const root of roots) for(const b of root.querySelectorAll('button')) if((b.textContent||'').trim()==='{chosen}'&&!b.disabled){{b.click();return;}}
                 }}""")
-                await asyncio.sleep(0.5)
+                await jsleep(0.4, 0.9)
 
         squad_id = await get_squad_id(page, best["name"])
         if not squad_id:
@@ -615,11 +633,13 @@ async def one_draft(page, num):
         if len(picks) >= 11:
             break
 
-    fixed_count = sum(1 for p in picks if p["name"] in FIXED_SET)
-    log(f"  Picked {len(picks)} players, {fixed_count}/11 fixed")
-    missing = [n for _, n in FIXED_XI if n not in [p["name"] for p in picks]]
+    fixed_count = sum(1 for p in picks if p["name"] in combo_set)
+    log(f"  Picked {len(picks)} players, {fixed_count}/11 from [{combo_name}]")
+    missing = [n for _, n in combo_xi if n not in [p["name"] for p in picks]]
     if missing:
         log(f"  MISSING: {missing}")
+    pos_of = {p["name"]: i + 1 for i, p in enumerate(picks)}
+    log("  XI picked: " + " | ".join(f"{pos_of[p['name']]}.{p['name']}" for p in picks))
 
     # Stable PID all day: never rotate per draft, else count-board fragments to v=1.
     # Game auto-seeds (E1) at 10/11 picks with Ga()=STABLE_PID — reuse ITS sid.
@@ -659,14 +679,14 @@ async def one_draft(page, num):
     sim = page.locator("button").filter(has_text=re.compile(r"SIMULATE", re.I)).first
     if await sim.is_visible(timeout=5000):
         await sim.click(timeout=5000)
-        await asyncio.sleep(2)
+        await jsleep(1.6, 2.6)
         skip = page.locator("button").filter(has_text=re.compile(r"SKIP TO END", re.I)).first
         try:
             if await skip.is_visible(timeout=3000):
                 await skip.click(timeout=3000)
         except:
             pass
-        await asyncio.sleep(3)
+        await jsleep(2.5, 4.0)
 
     ss = SHOTS_DIR / f"d{num}.png"
     await page.screenshot(path=str(ss), full_page=False)
@@ -675,6 +695,8 @@ async def one_draft(page, num):
     overs_m = re.search(r"(\d{2,3}(?:\.\d)?)\s*overs?", body, re.I)
     overs_val = float(overs_m.group(1)) if overs_m else None
     balls_val = int(round(overs_val * 6)) if overs_val else None
+    score_m = re.search(r"(\d{3,}/\d+)", body)
+    score_val = score_m.group(1) if score_m else "?"
 
     if "HISTORY REWRITTEN" in body:
         if balls_val and balls_val < best_balls[0]:
@@ -759,22 +781,25 @@ async def one_draft(page, num):
                 except:
                     pass
 
-                log(f"  Waiting {HOLD_SEC}s before next draft...")
-                await page.wait_for_timeout(HOLD_SEC * 1000)
+                log(f"  +-- SCORECARD draft#{num} [{combo_name}] --")
+                log(f"  | {score_val} in {overs_val} ov ({balls_val} balls) - HISTORY REWRITTEN")
+                log(f"  +-- rank fastest #{ranks.get('today','?')} - waiting for count poll --")
+                hold = HOLD_SEC + random.randint(0, 8)
+                log(f"  Waiting {hold}s before next draft...")
+                await page.wait_for_timeout(hold * 1000)
             else:
                 log("  submit failed, retrying in 15s...")
                 await page.wait_for_timeout(15000)
         else:
             log("  no sid, skipping submit")
 
-    for kw in ["CHOKED", "HEARTBREAK", "OUTCLASSED", "UNPREPARED"]:
-        if kw in body:
-            log(f"  Result: {kw}")
-            break
     if "HISTORY REWRITTEN" not in body:
-        m = re.search(r"(\d+/\d+)\s", body)
-        if m:
-            log(f"  Score: {m.group(1)}")
+        for kw in ["CHOKED", "HEARTBREAK", "OUTCLASSED", "UNPREPARED"]:
+            if kw in body:
+                log(f"  +-- SCORECARD draft#{num} [{combo_name}] --")
+                log(f"  | {score_val} - {kw}")
+                log(f"  +-- no submit, moving on --")
+                break
 
     again = page.locator("button").filter(has_text=re.compile(r"DRAFT AGAIN", re.I)).first
     try:
@@ -799,8 +824,9 @@ async def one_draft(page, num):
     return "HISTORY REWRITTEN" in body
 
 async def main():
-    log(f"spin_fixed11.py FIXED XI: {', '.join(FIXED_NAMES)}")
-    log(f"HANDLE={HANDLE} MAX_DRAFTS={MAX_DRAFTS} HOLD_SEC={HOLD_SEC} STABLE_PID={STABLE_PID}")
+    log(f"spin_fixed11.py 10-COMBO rotation: {', '.join(n for n, _ in COMBOS)}")
+    log(f"HANDLE={HANDLE} drafts_planned={MAX_DRAFTS} pid={STABLE_PID}")
+    log("Session: " + " > ".join(f"d{i+1}:{combo_for(i+1)[0]}" for i in range(MAX_DRAFTS)))
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=False, args=["--window-size=480,1000"])
         ctx = await browser.new_context(viewport={"width": 480, "height": 1000}, device_scale_factor=2)

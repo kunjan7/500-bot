@@ -1,7 +1,10 @@
 name: 500-0 freq-drafter 24/7
 on:
   schedule:
-    - cron: "*/30 * * * *"   # every 30 min — stable daily PID stacks wins on one count-board id
+    # 15-min human-like sessions, every 2h while awake.
+    # UTC hours -> IST: 06:37, 08:37, 10:37, 12:37, 14:37, 16:37, 18:37, 20:37, 22:37.
+    # Quiet ~23:00-06:30 IST (sleep). Weekends grind more drafts (see code).
+    - cron: "7 1,3,5,7,9,11,13,15,17 * * *"
   workflow_dispatch:
   push:
     branches: [main]
@@ -9,7 +12,7 @@ on:
 jobs:
   draft:
     runs-on: ubuntu-22.04
-    timeout-minutes: 20
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -25,12 +28,12 @@ jobs:
         if: steps.cache-pw.outputs.cache-hit != 'true'
       - run: python -m playwright install-deps chromium
         if: steps.cache-pw.outputs.cache-hit != 'true'
-      - name: Run FIXED11 drafter (15min session)
+      - name: Run drafter (15min human-like session)
         env:
           HANDLE: ${{ secrets.HANDLE || 'kumar6071' }}
-          MAX_DRAFTS: "20"
-          HOLD_SEC: "10"       # 10s hold after each win
-          SEED_DELAY: "2"      # 2s delay between API calls
+          # MAX_DRAFTS intentionally unset: code randomizes 4-6 (weekday) / 8-10 (weekend)
+          HOLD_SEC: "10"
+          SEED_DELAY: "2"
         run: xvfb-run --auto-servernum python spin_fixed11.py
       - uses: actions/upload-artifact@v4
         if: always()
