@@ -1,7 +1,8 @@
 name: 500-0 freq-drafter 24/7
 on:
-  schedule:
-    - cron: "*/30 * * * *"   # every 30 min — 48 runs/day × 20 drafts = 960 attempts
+  # schedule paused for single-run Most-500s test (same stable PID must not seed concurrently)
+  # schedule:
+  #   - cron: "*/30 * * * *"
   workflow_dispatch:
   push:
     branches: [main]

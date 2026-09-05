@@ -230,6 +230,37 @@ async def setup_route_interception(page):
     await page.route("**/*raasnhafiz*workers.dev*submit*", lb_log)
     await page.route("**/*raasnhafiz*workers.dev*board*", lb_log)
 
+    async def seed_cap(route):
+        # Game auto-seeds (E1) at 10/11 picks with Ga()=STABLE_PID.
+        # Capture its sid so our submit reuses the SAME session (no re-seed conflict).
+        try:
+            resp = await route.fetch()
+            try:
+                txt = await resp.text()
+                try:
+                    data = json.loads(txt)
+                    sid = data.get("sid")
+                    if sid:
+                        try:
+                            await page.evaluate(f"() => {{ (window.__seedSids = window.__seedSids || []).push('{sid}'); window.__lastSeedSid = '{sid}'; }}")
+                        except:
+                            pass
+                        log(f"  [GAME SEED] sid={sid[:20]}...")
+                except:
+                    pass
+                await route.fulfill(response=resp, body=txt,
+                    content_type=resp.headers.get("content-type", "application/json"))
+            except:
+                await route.continue_()
+        except:
+            try:
+                await route.continue_()
+            except:
+                pass
+
+    await page.route("**/*500leaderboard*seed*", seed_cap)
+    await page.route("**/*raasnhafiz*workers.dev*seed*", seed_cap)
+
     async def intercept(route):
         resp = await route.fetch()
         body = await resp.text()
@@ -429,6 +460,10 @@ async def one_draft(page, num):
     log(f"=== DRAFT #{num} FIXED11 {HANDLE} ===")
     current_picks.clear()
     current_sid = None
+    try:
+        seed_n0 = await page.evaluate("() => (window.__seedSids||[]).length")
+    except:
+        seed_n0 = 0
 
     for _ in range(10):
         try:
@@ -586,16 +621,37 @@ async def one_draft(page, num):
         log(f"  MISSING: {missing}")
 
     # Stable PID all day: never rotate per draft, else count-board fragments to v=1.
-    # Game seeds at 10/11 picks with Ga() (localStorage pid) — keep it pinned to STABLE_PID.
+    # Game auto-seeds (E1) at 10/11 picks with Ga()=STABLE_PID — reuse ITS sid.
+    # A manual re-seed with the same id conflicts server-side (one session per id),
+    # which was causing sid=None -> submits skipped -> zero count-board wins.
     draft_pid = STABLE_PID
     await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{STABLE_PID}')")
     await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
-    await asyncio.sleep(SEED_DELAY)
-    # Match game E1(): seed with id+handle only (no xi).
-    current_sid = await api_seed_no_xi(page, draft_pid)
+    current_sid = None
+    for _ in range(20):  # wait ~10s for game's seed response (fired at 10 picks)
+        await page.wait_for_timeout(500)
+        try:
+            sids = await page.evaluate("() => (window.__seedSids||[])")
+            if sids and len(sids) > seed_n0:
+                current_sid = sids[-1]
+                log(f"  GAME SEED sid={current_sid[:20]}...")
+                break
+        except:
+            pass
     if not current_sid:
-        log("  SEED (no xi) failed, trying with xi fallback...")
-        current_sid = await api_seed(page, draft_pid)
+        try:
+            last = await page.evaluate("() => window.__lastSeedSid || ''")
+            if last:
+                current_sid = last
+                log(f"  GAME SEED (last) sid={current_sid[:20]}...")
+        except:
+            pass
+    if not current_sid:
+        log("  no game seed captured, manual seed fallback...")
+        current_sid = await api_seed_no_xi(page, draft_pid)
+        if not current_sid:
+            log("  SEED (no xi) failed, trying with xi fallback...")
+            current_sid = await api_seed(page, draft_pid)
     await asyncio.sleep(SEED_DELAY)
 
     log("  Simulating...")
