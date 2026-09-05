@@ -551,42 +551,60 @@ async def one_draft(page, num):
             ranks = await api_submit(page, draft_pid, current_sid)
             await asyncio.sleep(SEED_DELAY)
             if ranks:
-                log(f"  LEADERBOARD: today #{ranks.get('today','?')} most #{ranks.get('most','?')}")
+                log(f"  SUBMIT returned: today #{ranks.get('today','?')} most #{ranks.get('most','?')}")
 
-                log("  Waiting 15s for leaderboard to fully update...")
-                await page.wait_for_timeout(15000)
-
-                log("  Checking leaderboard panel...")
-                try:
-                    lb_text = await page.inner_text("body")
-                    lb_keywords = ["TODAY", "THIS WEEK", "ALL TIME", "MOST 500", "FASTEST CHASE"]
-                    found_kws = [kw for kw in lb_keywords if kw in lb_text.upper()]
-                    if found_kws:
-                        log(f"  Leaderboard visible: {', '.join(found_kws)}")
-                    else:
-                        log("  Leaderboard not visible yet, clicking back arrow to open it...")
-                        back_btn = page.locator("button").filter(has_text=re.compile(r"←", re.I)).first
-                        if await back_btn.is_visible(timeout=2000):
-                            await back_btn.click(timeout=2000)
-                            await page.wait_for_timeout(3000)
-                            lb_text = await page.inner_text("body")
-                            found_kws = [kw for kw in lb_keywords if kw in lb_text.upper()]
-                            log(f"  After back click: {', '.join(found_kws) if found_kws else 'no leaderboard text found'}")
-                except Exception as e:
-                    log(f"  Leaderboard check err: {e}")
+                log("  Polling leaderboard until entry is confirmed...")
+                confirmed = False
+                for poll in range(20):
+                    await asyncio.sleep(5)
+                    try:
+                        lb_check = await page.evaluate(r"""async (params) => {
+                            const {handle} = params;
+                            const out = {};
+                            for (const w of ['today','most']) {
+                                try {
+                                    const r = await fetch('""" + LB_URL + r"""/board?window=' + w);
+                                    if (r.ok) {
+                                        const d = await r.json();
+                                        const entries = d.top || [];
+                                        const idx = entries.findIndex(e => e.handle === handle);
+                                        if (idx >= 0) out[w] = {rank: idx+1, balls: entries[idx].balls, runs: entries[idx].runs};
+                                        else out[w] = null;
+                                    }
+                                } catch(e) {}
+                            }
+                            return out;
+                        }""", {"handle": HANDLE})
+                        today_e = lb_check.get("today")
+                        most_e = lb_check.get("most")
+                        if today_e and most_e:
+                            log(f"  CONFIRMED! today #{today_e['rank']} ({today_e['balls']} balls) most #{most_e['rank']} ({most_e['balls']} balls)")
+                            confirmed = True
+                            break
+                        else:
+                            parts = []
+                            if today_e: parts.append(f"today #{today_e['rank']}")
+                            else: parts.append("today pending")
+                            if most_e: parts.append(f"most #{most_e['rank']}")
+                            else: parts.append("most pending")
+                            log(f"  Poll {poll+1}/20: {', '.join(parts)}")
+                    except Exception as e:
+                        log(f"  Poll {poll+1} err: {e}")
+                if not confirmed:
+                    log("  Leaderboard not confirmed after 100s, proceeding anyway")
 
                 try:
                     ss_lb = SHOTS_DIR / f"d{num}_leaderboard.png"
                     await page.screenshot(path=str(ss_lb), full_page=True)
-                    log(f"  Saved leaderboard screenshot: {ss_lb.name}")
+                    log(f"  Saved screenshot: {ss_lb.name}")
                 except:
                     pass
 
                 log(f"  Waiting {HOLD_SEC}s before next draft...")
                 await page.wait_for_timeout(HOLD_SEC * 1000)
             else:
-                log("  submit failed, retrying in 10s...")
-                await page.wait_for_timeout(10000)
+                log("  submit failed, retrying in 15s...")
+                await page.wait_for_timeout(15000)
         else:
             log("  no sid, skipping submit")
 
