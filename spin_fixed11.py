@@ -15,9 +15,10 @@ LB_URL = "https://500leaderboard.raasnhafiz.workers.dev"
 SHOTS_DIR = Path(__file__).parent / "shots_fixed11"
 SHOTS_DIR.mkdir(exist_ok=True)
 
-HANDLE = os.getenv("HANDLE", "k700")
-MAX_DRAFTS = int(os.getenv("MAX_DRAFTS", "1000"))
-HOLD_SEC = int(os.getenv("HOLD_SEC", "20"))
+HANDLE = os.getenv("HANDLE", "kumar6071")
+MAX_DRAFTS = int(os.getenv("MAX_DRAFTS", "50"))
+HOLD_SEC = int(os.getenv("HOLD_SEC", "30"))
+SEED_DELAY = float(os.getenv("SEED_DELAY", "3"))
 
 FIXED_XI = [
     (1, "Rohit Sharma"), (2, "Sachin Tendulkar"), (3, "Virat Kohli"),
@@ -490,7 +491,9 @@ async def one_draft(page, num):
     draft_pid = gen_pid()
     await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{draft_pid}')")
     await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
+    await asyncio.sleep(SEED_DELAY)
     current_sid = await api_seed(page, draft_pid)
+    await asyncio.sleep(SEED_DELAY)
 
     log("  Simulating...")
     sim = page.locator("button").filter(has_text=re.compile(r"SIMULATE", re.I)).first
@@ -524,7 +527,9 @@ async def one_draft(page, num):
         await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{draft_pid}')")
 
         if current_sid:
+            await asyncio.sleep(SEED_DELAY)
             ranks = await api_submit(page, draft_pid, current_sid)
+            await asyncio.sleep(SEED_DELAY)
             if ranks:
                 log(f"  LEADERBOARD: today #{ranks.get('today','?')} most #{ranks.get('most','?')}")
             else:
@@ -645,6 +650,25 @@ async def main():
             log(f"Progress: {wins}/{i} wins best {best_balls[0]} balls")
 
         log(f"=== DONE {wins}/{MAX_DRAFTS} wins best {best_balls[0]} ===")
+
+        log("=== LEADERBOARD VERIFICATION ===")
+        try:
+            import urllib.request
+            for window in ["today", "most"]:
+                url = f"{LB_URL}/board?window={window}"
+                req = urllib.request.Request(url)
+                resp = urllib.request.urlopen(req, timeout=15)
+                data = json.loads(resp.read())
+                entries = data.get("top", [])
+                found = [e for e in entries if e.get("handle") == HANDLE]
+                if found:
+                    e = found[0]
+                    log(f"  {window}: #{entries.index(e)+1} handle={e['handle']} balls={e['balls']} runs={e['runs']}")
+                else:
+                    log(f"  {window}: NOT FOUND in top {len(entries)}")
+        except Exception as e:
+            log(f"  verification err: {e}")
+
         await page.wait_for_timeout(3000)
         await browser.close()
 
