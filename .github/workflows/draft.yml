@@ -19,9 +19,9 @@ jobs:
       - name: Run FIXED11 drafter (50 drafts, 30s hold, kumar6071)
         env:
           HANDLE: ${{ secrets.HANDLE || 'kumar6071' }}
-          MAX_DRAFTS: "50"     # 50 drafts per run (~55 min with 30s hold + delays)
-          HOLD_SEC: "30"       # 30s hold after each win
-          SEED_DELAY: "3"      # 3s delay between API calls to avoid rate limit
+          MAX_DRAFTS: "50"
+          HOLD_SEC: "45"       # 45s hold after each win for leaderboard to update
+          SEED_DELAY: "5"      # 5s delay between API calls to avoid rate limit
         run: xvfb-run --auto-servernum python spin_fixed11.py
       - uses: actions/upload-artifact@v4
         if: always()

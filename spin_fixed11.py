@@ -18,7 +18,7 @@ SHOTS_DIR.mkdir(exist_ok=True)
 HANDLE = os.getenv("HANDLE", "kumar6071")
 MAX_DRAFTS = int(os.getenv("MAX_DRAFTS", "50"))
 HOLD_SEC = int(os.getenv("HOLD_SEC", "30"))
-SEED_DELAY = float(os.getenv("SEED_DELAY", "3"))
+SEED_DELAY = float(os.getenv("SEED_DELAY", "5"))
 
 FIXED_XI = [
     (1, "Rohit Sharma"), (2, "Sachin Tendulkar"), (3, "Virat Kohli"),
@@ -51,60 +51,80 @@ def gen_pid():
 
 async def api_seed(page, pid):
     """Register team with leaderboard via POST /seed, return sid or None."""
-    try:
-        result = await page.evaluate(r"""async (params) => {
-            const {pid, handle, xi} = params;
-            try {
-                const resp = await fetch('""" + LB_URL + r"""/seed', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({id: pid, handle: handle, xi: xi})
-                });
-                if (!resp.ok) return {ok: false, status: resp.status, text: await resp.text()};
-                return {ok: true, data: await resp.json()};
-            } catch(e) {
-                return {ok: false, error: e.message};
-            }
-        }""", {"pid": pid, "handle": HANDLE, "xi": [{"n": p["name"], "sq": p.get("squadId", "")} for p in current_picks]})
-        if result.get("ok"):
-            sid = result.get("data", {}).get("sid", "")
-            log(f"  SEED ok sid={sid[:20]}...")
-            return sid
-        else:
-            log(f"  SEED failed: {result}")
+    for attempt in range(3):
+        try:
+            result = await page.evaluate(r"""async (params) => {
+                const {pid, handle, xi} = params;
+                try {
+                    const resp = await fetch('""" + LB_URL + r"""/seed', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({id: pid, handle: handle, xi: xi})
+                    });
+                    const text = await resp.text();
+                    if (resp.status === 429) return {ok: false, retry: true, status: 429};
+                    if (!resp.ok) return {ok: false, status: resp.status, text: text};
+                    return {ok: true, data: JSON.parse(text)};
+                } catch(e) {
+                    return {ok: false, error: e.message};
+                }
+            }""", {"pid": pid, "handle": HANDLE, "xi": [{"n": p["name"], "sq": p.get("squadId", "")} for p in current_picks]})
+            if result.get("ok"):
+                sid = result.get("data", {}).get("sid", "")
+                log(f"  SEED ok sid={sid[:20]}...")
+                return sid
+            elif result.get("retry"):
+                wait = 30 * (attempt + 1)
+                log(f"  SEED rate limited (429), waiting {wait}s (attempt {attempt+1}/3)...")
+                await page.wait_for_timeout(wait * 1000)
+                continue
+            else:
+                log(f"  SEED failed: {result}")
+                return None
+        except Exception as e:
+            log(f"  SEED err: {e}")
             return None
-    except Exception as e:
-        log(f"  SEED err: {e}")
-        return None
+    log("  SEED failed after 3 retries")
+    return None
 
 async def api_submit(page, pid, sid):
     """Submit win to leaderboard via POST /submit, return ranks or None."""
-    try:
-        xi_payload = [{"n": p["name"], "r": p.get("role", "BAT"), "sq": p.get("squadId", "")} for p in current_picks]
-        result = await page.evaluate(r"""async (params) => {
-            const {pid, handle, sid, xi} = params;
-            try {
-                const resp = await fetch('""" + LB_URL + r"""/submit', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({id: pid, handle: handle, sid: sid, xi: xi})
-                });
-                if (!resp.ok) return {ok: false, status: resp.status, text: await resp.text()};
-                return {ok: true, data: await resp.json()};
-            } catch(e) {
-                return {ok: false, error: e.message};
-            }
-        }""", {"pid": pid, "handle": HANDLE, "sid": sid, "xi": xi_payload})
-        if result.get("ok"):
-            ranks = result.get("data", {}).get("ranks", {})
-            log(f"  SUBMIT ok! today={ranks.get('today','?')} most={ranks.get('most','?')}")
-            return ranks
-        else:
-            log(f"  SUBMIT failed: {result}")
+    for attempt in range(3):
+        try:
+            xi_payload = [{"n": p["name"], "r": p.get("role", "BAT"), "sq": p.get("squadId", "")} for p in current_picks]
+            result = await page.evaluate(r"""async (params) => {
+                const {pid, handle, sid, xi} = params;
+                try {
+                    const resp = await fetch('""" + LB_URL + r"""/submit', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({id: pid, handle: handle, sid: sid, xi: xi})
+                    });
+                    const text = await resp.text();
+                    if (resp.status === 429) return {ok: false, retry: true, status: 429};
+                    if (!resp.ok) return {ok: false, status: resp.status, text: text};
+                    return {ok: true, data: JSON.parse(text)};
+                } catch(e) {
+                    return {ok: false, error: e.message};
+                }
+            }""", {"pid": pid, "handle": HANDLE, "sid": sid, "xi": xi_payload})
+            if result.get("ok"):
+                ranks = result.get("data", {}).get("ranks", {})
+                log(f"  SUBMIT ok! today={ranks.get('today','?')} most={ranks.get('most','?')}")
+                return ranks
+            elif result.get("retry"):
+                wait = 30 * (attempt + 1)
+                log(f"  SUBMIT rate limited (429), waiting {wait}s (attempt {attempt+1}/3)...")
+                await page.wait_for_timeout(wait * 1000)
+                continue
+            else:
+                log(f"  SUBMIT failed: {result}")
+                return None
+        except Exception as e:
+            log(f"  SUBMIT err: {e}")
             return None
-    except Exception as e:
-        log(f"  SUBMIT err: {e}")
-        return None
+    log("  SUBMIT failed after 3 retries")
+    return None
 
 def map_role_from_card(card):
     """Map card role string to API role code."""
@@ -532,46 +552,43 @@ async def one_draft(page, num):
             await asyncio.sleep(SEED_DELAY)
             if ranks:
                 log(f"  LEADERBOARD: today #{ranks.get('today','?')} most #{ranks.get('most','?')}")
-            else:
-                log("  submit failed, trying CLAIM UI fallback")
-                try:
-                    claim = page.locator("button").filter(has_text=re.compile(r"CLAIM", re.I)).first
-                    if await claim.is_visible(timeout=3000):
-                        inp = page.locator("input[placeholder*='handle' i]").first
-                        if not await inp.is_visible(timeout=400):
-                            inp = page.locator("input").first
-                        if await inp.is_visible(timeout=600):
-                            await inp.fill(HANDLE)
-                            await page.wait_for_timeout(300)
-                        await claim.click(timeout=2000)
-                        log("  clicked CLAIM fallback")
-                        await page.wait_for_timeout(2500)
-                except Exception as e:
-                    log(f"  CLAIM fallback err {e}")
-        else:
-            log("  no sid, trying CLAIM UI")
-            try:
-                claim = page.locator("button").filter(has_text=re.compile(r"CLAIM", re.I)).first
-                if await claim.is_visible(timeout=3000):
-                    inp = page.locator("input[placeholder*='handle' i]").first
-                    if not await inp.is_visible(timeout=400):
-                        inp = page.locator("input").first
-                    if await inp.is_visible(timeout=600):
-                        await inp.fill(HANDLE)
-                        await page.wait_for_timeout(300)
-                    await claim.click(timeout=2000)
-                    log("  clicked CLAIM")
-                    await page.wait_for_timeout(2500)
-            except Exception as e:
-                log(f"  CLAIM err {e}")
 
-        log(f"  HOLDING {HOLD_SEC}s...")
-        await page.wait_for_timeout(HOLD_SEC * 1000)
-        try:
-            ss2 = SHOTS_DIR / f"d{num}_win.png"
-            await page.screenshot(path=str(ss2), full_page=True)
-        except:
-            pass
+                log("  Waiting 15s for leaderboard to fully update...")
+                await page.wait_for_timeout(15000)
+
+                log("  Checking leaderboard panel...")
+                try:
+                    lb_text = await page.inner_text("body")
+                    lb_keywords = ["TODAY", "THIS WEEK", "ALL TIME", "MOST 500", "FASTEST CHASE"]
+                    found_kws = [kw for kw in lb_keywords if kw in lb_text.upper()]
+                    if found_kws:
+                        log(f"  Leaderboard visible: {', '.join(found_kws)}")
+                    else:
+                        log("  Leaderboard not visible yet, clicking back arrow to open it...")
+                        back_btn = page.locator("button").filter(has_text=re.compile(r"←", re.I)).first
+                        if await back_btn.is_visible(timeout=2000):
+                            await back_btn.click(timeout=2000)
+                            await page.wait_for_timeout(3000)
+                            lb_text = await page.inner_text("body")
+                            found_kws = [kw for kw in lb_keywords if kw in lb_text.upper()]
+                            log(f"  After back click: {', '.join(found_kws) if found_kws else 'no leaderboard text found'}")
+                except Exception as e:
+                    log(f"  Leaderboard check err: {e}")
+
+                try:
+                    ss_lb = SHOTS_DIR / f"d{num}_leaderboard.png"
+                    await page.screenshot(path=str(ss_lb), full_page=True)
+                    log(f"  Saved leaderboard screenshot: {ss_lb.name}")
+                except:
+                    pass
+
+                log(f"  Waiting {HOLD_SEC}s before next draft...")
+                await page.wait_for_timeout(HOLD_SEC * 1000)
+            else:
+                log("  submit failed, retrying in 10s...")
+                await page.wait_for_timeout(10000)
+        else:
+            log("  no sid, skipping submit")
 
     for kw in ["CHOKED", "HEARTBREAK", "OUTCLASSED", "UNPREPARED"]:
         if kw in body:
