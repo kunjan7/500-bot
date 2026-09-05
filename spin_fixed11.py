@@ -20,6 +20,26 @@ MAX_DRAFTS = int(os.getenv("MAX_DRAFTS", "20"))
 HOLD_SEC = int(os.getenv("HOLD_SEC", "10"))
 SEED_DELAY = float(os.getenv("SEED_DELAY", "2"))
 
+def _b36(n):
+    if n <= 0:
+        return "0"
+    out = ""
+    while n > 0:
+        out = "0123456789abcdefghijklmnopqrstuvwxyz"[n % 36] + out
+        n //= 36
+    return out
+
+def daily_pid():
+    """Deterministic PID per UTC day so wins accumulate on ONE count-board id.
+    Format matches game: base36(midnight_utc_ms) + 8-char suffix."""
+    import datetime
+    day = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
+    dt = datetime.datetime.strptime(day, "%Y-%m-%d").replace(tzinfo=datetime.timezone.utc)
+    ts = int(dt.timestamp() * 1000)
+    return _b36(ts) + "kumar607"
+
+STABLE_PID = os.getenv("STABLE_PID", "").strip() or daily_pid()
+
 FIXED_XI = [
     (1, "Rohit Sharma"), (2, "Sachin Tendulkar"), (3, "Virat Kohli"),
     (4, "Viv Richards"), (5, "AB de Villiers"), (6, "Heinrich Klaasen"),
@@ -565,14 +585,17 @@ async def one_draft(page, num):
     if missing:
         log(f"  MISSING: {missing}")
 
-    draft_pid = gen_pid()
-    await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{draft_pid}')")
+    # Stable PID all day: never rotate per draft, else count-board fragments to v=1.
+    # Game seeds at 10/11 picks with Ga() (localStorage pid) — keep it pinned to STABLE_PID.
+    draft_pid = STABLE_PID
+    await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{STABLE_PID}')")
     await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
     await asyncio.sleep(SEED_DELAY)
-    current_sid = await api_seed(page, draft_pid)
+    # Match game E1(): seed with id+handle only (no xi).
+    current_sid = await api_seed_no_xi(page, draft_pid)
     if not current_sid:
-        log("  SEED with xi failed, trying without xi...")
-        current_sid = await api_seed_no_xi(page, draft_pid)
+        log("  SEED (no xi) failed, trying with xi fallback...")
+        current_sid = await api_seed(page, draft_pid)
     await asyncio.sleep(SEED_DELAY)
 
     log("  Simulating...")
@@ -619,7 +642,7 @@ async def one_draft(page, num):
                     await asyncio.sleep(5)
                     try:
                         lb_check = await page.evaluate(r"""async (params) => {
-                            const {handle} = params;
+                            const {handle, pid} = params;
                             const out = {};
                             for (const w of ['today','most']) {
                                 try {
@@ -639,19 +662,29 @@ async def one_draft(page, num):
                                     const d = await r.json();
                                     const entries = d.top || [];
                                     const idx = entries.findIndex(e => e.handle === handle);
-                                    if (idx >= 0) out['count'] = {rank: idx+1, wins: entries[idx].v};
+                                    if (idx >= 0) out['count'] = {rank: idx+1, wins: entries[idx].v, id: entries[idx].id};
                                     else out['count'] = null;
                                 }
                             } catch(e) {}
+                            try {
+                                const r = await fetch('""" + LB_URL + r"""/count?window=today&id=' + encodeURIComponent(pid));
+                                if (r.ok) {
+                                    const d = await r.json();
+                                    if (d.you) out['you'] = d.you;
+                                    else if (d.count) out['you'] = {v: d.count};
+                                }
+                            } catch(e) {}
                             return out;
-                        }""", {"handle": HANDLE})
+                        }""", {"handle": HANDLE, "pid": STABLE_PID})
                         today_e = lb_check.get("today")
                         most_e = lb_check.get("most")
                         count_e = lb_check.get("count")
-                        if today_e or count_e:
+                        you_e = lb_check.get("you")
+                        if today_e or count_e or you_e:
                             parts = []
                             if today_e: parts.append(f"fastest #{today_e['rank']} ({today_e['balls']} balls)")
                             if count_e: parts.append(f"most 500s #{count_e['rank']} ({count_e['wins']} wins)")
+                            if you_e: parts.append(f"my id wins={you_e.get('v', you_e)}")
                             log(f"  CONFIRMED! {', '.join(parts)}")
                             confirmed = True
                             break
@@ -710,7 +743,7 @@ async def one_draft(page, num):
 
 async def main():
     log(f"spin_fixed11.py FIXED XI: {', '.join(FIXED_NAMES)}")
-    log(f"HANDLE={HANDLE} MAX_DRAFTS={MAX_DRAFTS} HOLD_SEC={HOLD_SEC}")
+    log(f"HANDLE={HANDLE} MAX_DRAFTS={MAX_DRAFTS} HOLD_SEC={HOLD_SEC} STABLE_PID={STABLE_PID}")
     async with async_playwright() as pw:
         browser = await pw.chromium.launch(headless=False, args=["--window-size=480,1000"])
         ctx = await browser.new_context(viewport={"width": 480, "height": 1000}, device_scale_factor=2)
@@ -718,9 +751,8 @@ async def main():
         await setup_route_interception(page)
         await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
         await page.wait_for_timeout(3000)
-        init_pid = gen_pid()
-        await page.evaluate(f"() => {{ localStorage.setItem('five-hundred-handle','{HANDLE}'); localStorage.setItem('five-hundred-pid','{init_pid}'); }}")
-        log(f"Initial PID {init_pid}")
+        await page.evaluate(f"() => {{ localStorage.setItem('five-hundred-handle','{HANDLE}'); localStorage.setItem('five-hundred-pid','{STABLE_PID}'); }}")
+        log(f"Initial PID {STABLE_PID} (stable all day)")
 
         ok = await page.evaluate("() => !!window.__No")
         log(f"Capture No={'OK' if ok else 'MISS'}")
@@ -757,7 +789,7 @@ async def main():
 
         log("=== LEADERBOARD VERIFICATION ===")
         try:
-            import urllib.request
+            import urllib.request, urllib.parse
             for endpoint in [("board", "today"), ("board", "most"), ("count", "today")]:
                 kind, window = endpoint
                 url = f"{LB_URL}/{kind}?window={window}"
@@ -769,11 +801,17 @@ async def main():
                 if found:
                     e = found[0]
                     if kind == "count":
-                        log(f"  {kind}/{window}: handle={e['handle']} wins={e.get('v',0)}")
+                        log(f"  {kind}/{window}: handle={e['handle']} wins={e.get('v',0)} id={e.get('id','')[:12]}")
                     else:
                         log(f"  {kind}/{window}: #{entries.index(e)+1} handle={e['handle']} balls={e['balls']} runs={e['runs']}")
                 else:
                     log(f"  {kind}/{window}: NOT FOUND in top {len(entries)}")
+            # Direct check of OUR stable id (count groups by id, not handle)
+            url = f"{LB_URL}/count?window=today&id={urllib.parse.quote(STABLE_PID)}"
+            req = urllib.request.Request(url)
+            resp = urllib.request.urlopen(req, timeout=15)
+            data = json.loads(resp.read())
+            log(f"  count/today?id=STABLE_PID: you={data.get('you')} count={data.get('count')} top_n={len(data.get('top',[]))}")
         except Exception as e:
             log(f"  verification err: {e}")
 
