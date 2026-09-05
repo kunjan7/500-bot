@@ -225,10 +225,10 @@ async def setup_route_interception(page):
         except:
             await route.continue_()
 
-    await page.route("**/*500leaderboard*submit*", lb_log)
-    await page.route("**/*500leaderboard*board*", lb_log)
-    await page.route("**/*raasnhafiz*workers.dev*submit*", lb_log)
-    await page.route("**/*raasnhafiz*workers.dev*board*", lb_log)
+    # NOTE: single * does not cross / in Playwright globs, so use **-style
+    # path suffixes (previous *500leaderboard*seed* patterns never matched).
+    await page.route("**/submit", lb_log)
+    await page.route("**/board**", lb_log)
 
     async def seed_cap(route):
         # Game auto-seeds (E1) at 10/11 picks with Ga()=STABLE_PID.
@@ -246,8 +246,10 @@ async def setup_route_interception(page):
                         except:
                             pass
                         log(f"  [GAME SEED] sid={sid[:20]}...")
+                    else:
+                        log(f"  [GAME SEED] no sid (status={resp.status} body={txt[:120]})")
                 except:
-                    pass
+                    log(f"  [GAME SEED] unparseable (status={resp.status} body={txt[:120]})")
                 await route.fulfill(response=resp, body=txt,
                     content_type=resp.headers.get("content-type", "application/json"))
             except:
@@ -258,8 +260,7 @@ async def setup_route_interception(page):
             except:
                 pass
 
-    await page.route("**/*500leaderboard*seed*", seed_cap)
-    await page.route("**/*raasnhafiz*workers.dev*seed*", seed_cap)
+    await page.route("**/seed", seed_cap)
 
     async def intercept(route):
         resp = await route.fetch()
