@@ -2,6 +2,7 @@
 spin_fixed11.py - Fixed XI for 500-0.com (React rewrite, Sep 2026)
 Forces: Rohit, Sachin, Virat, Viv, AB, Henri(Klaasen), Afridi, Wasim, Malcolm, Shane, Muthaia
 Uses Math.random interception to control team spin + card picker for player selection.
+Submits wins directly via leaderboard API (bypasses CLAIM button).
 """
 import asyncio, json, re, time, random, os, sys
 from pathlib import Path
@@ -10,10 +11,11 @@ from playwright.async_api import async_playwright
 sys.stdout = open(sys.stdout.fileno(), mode="w", encoding="utf-8", buffering=1)
 
 BASE_URL = "https://500-0.com"
+LB_URL = "https://500leaderboard.raasnhafiz.workers.dev"
 SHOTS_DIR = Path(__file__).parent / "shots_fixed11"
 SHOTS_DIR.mkdir(exist_ok=True)
 
-HANDLE = os.getenv("HANDLE", "kunjan700")
+HANDLE = os.getenv("HANDLE", "k700")
 MAX_DRAFTS = int(os.getenv("MAX_DRAFTS", "1000"))
 HOLD_SEC = int(os.getenv("HOLD_SEC", "20"))
 
@@ -30,6 +32,86 @@ def log(m):
     print(f"[{time.strftime('%H:%M:%S')}] {m}", flush=True)
 
 best_balls = [999]
+
+# Track picks per draft: list of {name, role, squadId}
+current_picks = []
+
+def gen_pid():
+    """Generate PID in game format: base36 timestamp + random chars."""
+    import time as _time
+    ts = int(_time.time() * 1000)
+    b36 = ""
+    n = ts
+    while n > 0:
+        b36 = "0123456789abcdefghijklmnopqrstuvwxyz"[n % 36] + b36
+        n //= 36
+    rnd = "".join(random.choice("0123456789abcdefghijklmnopqrstuvwxyz") for _ in range(8))
+    return b36 + rnd
+
+async def api_seed(page, pid):
+    """Register team with leaderboard via POST /seed, return sid or None."""
+    try:
+        result = await page.evaluate(r"""async (params) => {
+            const {pid, handle, xi} = params;
+            try {
+                const resp = await fetch('""" + LB_URL + r"""/seed', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: pid, handle: handle, xi: xi})
+                });
+                if (!resp.ok) return {ok: false, status: resp.status, text: await resp.text()};
+                return {ok: true, data: await resp.json()};
+            } catch(e) {
+                return {ok: false, error: e.message};
+            }
+        }""", {"pid": pid, "handle": HANDLE, "xi": [{"n": p["name"], "sq": p.get("squadId", "")} for p in current_picks]})
+        if result.get("ok"):
+            sid = result.get("data", {}).get("sid", "")
+            log(f"  SEED ok sid={sid[:20]}...")
+            return sid
+        else:
+            log(f"  SEED failed: {result}")
+            return None
+    except Exception as e:
+        log(f"  SEED err: {e}")
+        return None
+
+async def api_submit(page, pid, sid):
+    """Submit win to leaderboard via POST /submit, return ranks or None."""
+    try:
+        xi_payload = [{"n": p["name"], "r": p.get("role", "BAT"), "sq": p.get("squadId", "")} for p in current_picks]
+        result = await page.evaluate(r"""async (params) => {
+            const {pid, handle, sid, xi} = params;
+            try {
+                const resp = await fetch('""" + LB_URL + r"""/submit', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({id: pid, handle: handle, sid: sid, xi: xi})
+                });
+                if (!resp.ok) return {ok: false, status: resp.status, text: await resp.text()};
+                return {ok: true, data: await resp.json()};
+            } catch(e) {
+                return {ok: false, error: e.message};
+            }
+        }""", {"pid": pid, "handle": HANDLE, "sid": sid, "xi": xi_payload})
+        if result.get("ok"):
+            ranks = result.get("data", {}).get("ranks", {})
+            log(f"  SUBMIT ok! today={ranks.get('today','?')} most={ranks.get('most','?')}")
+            return ranks
+        else:
+            log(f"  SUBMIT failed: {result}")
+            return None
+    except Exception as e:
+        log(f"  SUBMIT err: {e}")
+        return None
+
+def map_role_from_card(card):
+    """Map card role string to API role code."""
+    r = card.get("role", "").upper()
+    if r == "WK": return "WK"
+    if r == "ALL-ROUNDER": return "AR"
+    if r == "BOWLER": return "BWL"
+    return "BAT"
 
 async def setup_route_interception(page):
     async def lb_log(route):
@@ -250,6 +332,9 @@ async def get_cards_from_page(page):
 
 async def one_draft(page, num):
     log(f"=== DRAFT #{num} FIXED11 {HANDLE} ===")
+    current_picks.clear()
+    current_sid = None
+
     for _ in range(10):
         try:
             await page.wait_for_timeout(500)
@@ -273,6 +358,7 @@ async def one_draft(page, num):
 
     picks = []
     needed_set = set(FIXED_NAMES)
+    last_squad_id = ""
 
     for spin in range(15):
         team_result = await page.evaluate("() => window.__chooseTeamForNextFixed()")
@@ -301,6 +387,7 @@ async def one_draft(page, num):
             sel = await page.evaluate("() => { const r=window.__lastSpinResult; return r?{id:r.id,name:r.name}:null; }")
             if sel:
                 await page.evaluate(f"() => {{ const h=window.__h; h.usage['{sel['id']}']=(h.usage['{sel['id']}']||0)+1; }}")
+                last_squad_id = sel["id"]
         except:
             pass
 
@@ -382,7 +469,9 @@ async def one_draft(page, num):
                 }}""")
                 await asyncio.sleep(0.5)
 
-        picks.append({"name": best["name"], "b": best.get("b", 0), "p": best.get("p", 0), "bl": best.get("bl", 0)})
+        pick_entry = {"name": best["name"], "b": best.get("b", 0), "p": best.get("p", 0), "bl": best.get("bl", 0), "role": map_role_from_card(best), "squadId": last_squad_id}
+        picks.append(pick_entry)
+        current_picks.append(pick_entry)
         try:
             safe_name = best["name"].replace("'", "\\'")
             await page.evaluate(f"() => {{ const h=window.__h; h.picked.push('{safe_name}'); if(h.openSlots.length) h.openSlots.shift(); }}")
@@ -397,6 +486,11 @@ async def one_draft(page, num):
     missing = [n for _, n in FIXED_XI if n not in [p["name"] for p in picks]]
     if missing:
         log(f"  MISSING: {missing}")
+
+    draft_pid = gen_pid()
+    await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{draft_pid}')")
+    await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
+    current_sid = await api_seed(page, draft_pid)
 
     log("  Simulating...")
     sim = page.locator("button").filter(has_text=re.compile(r"SIMULATE", re.I)).first
@@ -425,41 +519,47 @@ async def one_draft(page, num):
             log(f"  *** NEW BEST: {balls_val} balls = {overs_val} overs ***")
         else:
             log(f"  >>> WIN {balls_val} balls = {overs_val} overs <<<")
-        claimed = False
-        try:
-            await page.wait_for_timeout(1500)
-            for attempt in range(20):
+
+        await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
+        await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{draft_pid}')")
+
+        if current_sid:
+            ranks = await api_submit(page, draft_pid, current_sid)
+            if ranks:
+                log(f"  LEADERBOARD: today #{ranks.get('today','?')} most #{ranks.get('most','?')}")
+            else:
+                log("  submit failed, trying CLAIM UI fallback")
+                try:
+                    claim = page.locator("button").filter(has_text=re.compile(r"CLAIM", re.I)).first
+                    if await claim.is_visible(timeout=3000):
+                        inp = page.locator("input[placeholder*='handle' i]").first
+                        if not await inp.is_visible(timeout=400):
+                            inp = page.locator("input").first
+                        if await inp.is_visible(timeout=600):
+                            await inp.fill(HANDLE)
+                            await page.wait_for_timeout(300)
+                        await claim.click(timeout=2000)
+                        log("  clicked CLAIM fallback")
+                        await page.wait_for_timeout(2500)
+                except Exception as e:
+                    log(f"  CLAIM fallback err {e}")
+        else:
+            log("  no sid, trying CLAIM UI")
+            try:
                 claim = page.locator("button").filter(has_text=re.compile(r"CLAIM", re.I)).first
-                if await claim.is_visible(timeout=800):
+                if await claim.is_visible(timeout=3000):
                     inp = page.locator("input[placeholder*='handle' i]").first
                     if not await inp.is_visible(timeout=400):
                         inp = page.locator("input").first
-                    try:
-                        if await inp.is_visible(timeout=600):
-                            v = await inp.input_value()
-                            if not v or len(v.strip()) < 2:
-                                await inp.fill(HANDLE)
-                                await page.wait_for_timeout(300)
-                                log(f"  filled handle {HANDLE}")
-                    except:
-                        pass
+                    if await inp.is_visible(timeout=600):
+                        await inp.fill(HANDLE)
+                        await page.wait_for_timeout(300)
                     await claim.click(timeout=2000)
                     log("  clicked CLAIM")
                     await page.wait_for_timeout(2500)
-                    claimed = True
-                    break
-                await page.wait_for_timeout(400)
-            if not claimed:
-                log("  CLAIM not found, trying evaluate")
-                try:
-                    clicked = await page.evaluate("() => { for(const b of document.querySelectorAll('button')) if(/CLAIM/i.test(b.textContent||'')) { b.click(); return 1; } return 0; }")
-                    log(f"  direct CLAIM clicked={clicked}")
-                except:
-                    pass
-            await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
-            await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','k1387-{HANDLE}')")
-        except Exception as e:
-            log(f"  claim err {e}")
+            except Exception as e:
+                log(f"  CLAIM err {e}")
+
         log(f"  HOLDING {HOLD_SEC}s...")
         await page.wait_for_timeout(HOLD_SEC * 1000)
         try:
@@ -486,7 +586,7 @@ async def one_draft(page, num):
             await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
             await page.wait_for_timeout(2000)
             await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
-            await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','k1387-{HANDLE}')")
+            await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{draft_pid}')")
             easy = page.locator("button").filter(has_text=re.compile(r"EASY", re.I)).first
             if await easy.is_visible(timeout=5000):
                 await easy.click(timeout=5000, force=True)
@@ -509,8 +609,9 @@ async def main():
         await setup_route_interception(page)
         await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
         await page.wait_for_timeout(3000)
-        await page.evaluate(f"() => {{ localStorage.setItem('five-hundred-handle','{HANDLE}'); localStorage.setItem('five-hundred-pid','k1387-{HANDLE}'); }}")
-        log(f"PID k1387-{HANDLE}")
+        init_pid = gen_pid()
+        await page.evaluate(f"() => {{ localStorage.setItem('five-hundred-handle','{HANDLE}'); localStorage.setItem('five-hundred-pid','{init_pid}'); }}")
+        log(f"Initial PID {init_pid}")
 
         ok = await page.evaluate("() => !!window.__No")
         log(f"Capture No={'OK' if ok else 'MISS'}")

@@ -18,7 +18,7 @@ jobs:
       - run: python -m playwright install --with-deps chromium
       - name: Run FIXED11 drafter (infinite loop, 1000 drafts, 20s hold)
         env:
-          HANDLE: ${{ secrets.HANDLE || 'kunjan700' }}
+          HANDLE: ${{ secrets.HANDLE || 'k700' }}
           MAX_DRAFTS: "1000"   # infinite loop per run (55 min timeout ≈ 35 drafts)
           HOLD_SEC: "20"       # 20s hold as earlier
         run: xvfb-run --auto-servernum python spin_fixed11.py
@@ -26,5 +26,5 @@ jobs:
         if: always()
         with:
           name: shots-${{ github.run_number }}
-          path: shots_hack/
+          path: shots_fixed11/
           retention-days: 7
