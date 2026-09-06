@@ -291,12 +291,31 @@ async def setup_route_interception(page):
         resp = await route.fetch()
         body = await resp.text()
         if "window.__No" not in body:
+            # Legacy anchors (older bundle variant).
             body = body.replace(
                 "],wt=(t,l,e)=>Math.max(l,Math.min(e,t));",
                 "];window.__No=No;window.__o6=o6;window.__S6=S6;window.__A6=A6;wt=(t,l,e)=>Math.max(l,Math.min(e,t));")
             body = body.replace(
                 "No[Math.floor(Math.random()*No.length)]",
                 "(window.__gamePool=No,window.__lastSpinResult=No[Math.floor(Math.random()*No.length)])")
+            # Variant-proof: discover the pool var by its data signature
+            # (stable across minifier renames) and expose/wrap it.
+            m = re.search(r'((?:var|let|const)\s+[A-Za-z_$][\w$]*\s*=\s*\[)\{id\s*:\s*"pakistan1990s"', body)
+            if m:
+                pv = re.search(r'[A-Za-z_$][\w$]*', m.group(0).split('=', 1)[0].split()[-1]).group(0)
+                before = body
+                body = body.replace(m.group(0), m.group(1) + 'window.__No=[' + '{id:"pakistan1990s"', 1)
+                spin_pat = pv + '[Math.floor(Math.random()*' + pv + '.length)]'
+                if spin_pat in body:
+                    body = body.replace(spin_pat,
+                        '(window.__gamePool=' + pv + ',window.__lastSpinResult=' + spin_pat + ')')
+                    log(f"  intercept: dynamic pool var={pv} (exposed + spin wrapped)")
+                else:
+                    log(f"  intercept: dynamic pool var={pv} exposed, spin line not found")
+                if body == before:
+                    log("  intercept WARN: dynamic replace changed nothing")
+            else:
+                log("  intercept WARN: pool signature not found, spins uncontrolled")
         await route.fulfill(response=resp, body=body, content_type="application/javascript")
 
     await page.route("**/*app*.js", intercept)
