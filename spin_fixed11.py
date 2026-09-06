@@ -691,7 +691,24 @@ async def one_draft(page, num):
     ss = SHOTS_DIR / f"d{num}.png"
     await page.screenshot(path=str(ss), full_page=False)
 
-    body = await page.inner_text("body")
+    # Poll for the result: render can lag SKIP. Missing a win here is harmless
+    # for counting (game auto-submits) but pollutes logs; worse, rushing to
+    # DRAFT AGAIN can navigate away before the game's auto-submit fires.
+    body = ""
+    for _ in range(15):
+        try:
+            body = await page.inner_text("body")
+        except:
+            pass
+        if "HISTORY REWRITTEN" in body or any(k in body for k in ["CHOKED", "HEARTBREAK", "OUTCLASSED", "UNPREPARED"]):
+            break
+        await page.wait_for_timeout(1000)
+    # Settle: give the game's own auto-submit time to fire before we do anything.
+    await page.wait_for_timeout(8000)
+    try:
+        body = await page.inner_text("body")
+    except:
+        pass
     overs_m = re.search(r"(\d{2,3}(?:\.\d)?)\s*overs?", body, re.I)
     overs_val = float(overs_m.group(1)) if overs_m else None
     balls_val = int(round(overs_val * 6)) if overs_val else None
@@ -710,10 +727,14 @@ async def one_draft(page, num):
 
         if current_sid:
             await asyncio.sleep(SEED_DELAY)
-            ranks = await api_submit(page, draft_pid, current_sid)
+            # Fallback only: game's own auto-submit usually counts the win
+            # first; ours then fails "expired" (harmless). Either way we
+            # poll the board to confirm below.
+            ranks = await api_submit(page, draft_pid, current_sid) or {}
             await asyncio.sleep(SEED_DELAY)
-            if ranks:
-                log(f"  SUBMIT returned: today #{ranks.get('today','?')} most #{ranks.get('most','?')}")
+            log(f"  SUBMIT returned: today #{ranks.get('today','?')} most #{ranks.get('most','?')}")
+            if True:
+                log(f"  Polling leaderboard until entry is confirmed...")
 
                 log("  Polling leaderboard until entry is confirmed...")
                 confirmed = False
@@ -787,9 +808,6 @@ async def one_draft(page, num):
                 hold = HOLD_SEC + random.randint(0, 8)
                 log(f"  Waiting {hold}s before next draft...")
                 await page.wait_for_timeout(hold * 1000)
-            else:
-                log("  submit failed, retrying in 15s...")
-                await page.wait_for_timeout(15000)
         else:
             log("  no sid, skipping submit")
 
@@ -835,7 +853,7 @@ async def main():
         await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
         await page.wait_for_timeout(3000)
         await page.evaluate(f"() => {{ localStorage.setItem('five-hundred-handle','{HANDLE}'); localStorage.setItem('five-hundred-pid','{STABLE_PID}'); }}")
-        log(f"Initial PID {STABLE_PID} (stable all day)")
+        log(f"Initial PID {STABLE_PID} (pinned forever)")
 
         ok = await page.evaluate("() => !!window.__No")
         log(f"Capture No={'OK' if ok else 'MISS'}")
