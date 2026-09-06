@@ -308,11 +308,13 @@ async def setup_route_interception(page):
                     "(window.__gamePool=No,window.__lastSpinResult=No[Math.floor(Math.random()*No.length)])")
                 # Variant-proof: discover the pool var by its data signature
                 # (stable across minifier renames) and expose/wrap it.
-                m = re.search(r'((?:var|let|const)\s+[A-Za-z_$][\w$]*\s*=\s*\[)\{id\s*:\s*"pakistan1990s"', body)
+                # group(1) EXCLUDES the '[' -> `var Lo=window.__No=[{...}]`
+                # (aliased, brackets balanced). Including it nests/breaks.
+                m = re.search(r'((?:var|let|const)\s+[A-Za-z_$][\w$]*\s*=\s*)\[\{id\s*:\s*"pakistan1990s"', body)
                 if m:
-                    pv = re.search(r'[A-Za-z_$][\w$]*', m.group(0).split('=', 1)[0].split()[-1]).group(0)
+                    pv = re.search(r'[A-Za-z_$][\w$]*', m.group(1).split('=', 1)[0].split()[-1]).group(0)
                     before = body
-                    body = body.replace(m.group(0), m.group(1) + 'window.__No=[' + '{id:"pakistan1990s"', 1)
+                    body = body.replace(m.group(0), m.group(1) + 'window.__No=[{id:"pakistan1990s"', 1)
                     spin_pat = pv + '[Math.floor(Math.random()*' + pv + '.length)]'
                     if spin_pat in body:
                         body = body.replace(spin_pat,
