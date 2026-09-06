@@ -4,7 +4,7 @@ Forces: Rohit, Sachin, Virat, Viv, AB, Henri(Klaasen), Afridi, Wasim, Malcolm, S
 Uses Math.random interception to control team spin + card picker for player selection.
 Submits wins directly via leaderboard API (bypasses CLAIM button).
 """
-import asyncio, json, re, time, random, os, sys
+import asyncio, json, re, time, random, os, sys, subprocess
 from pathlib import Path
 from playwright.async_api import async_playwright
 
@@ -15,26 +15,76 @@ LB_URL = "https://500leaderboard.raasnhafiz.workers.dev"
 SHOTS_DIR = Path(__file__).parent / "shots_fixed11"
 SHOTS_DIR.mkdir(exist_ok=True)
 
-HANDLE = os.getenv("HANDLE", "kumar6071")
-def default_max_drafts():
-    """Human-like session length: longer grind on weekends, short on weekdays."""
-    import datetime as _d
-    wknd = _d.datetime.now(_d.timezone.utc).weekday() >= 5
-    lo, hi = (8, 10) if wknd else (4, 6)
-    return random.randint(lo, hi)
-MAX_DRAFTS = int(os.getenv("MAX_DRAFTS", "0") or 0) or default_max_drafts()
+HANDLE = os.getenv("HANDLE", "CoverDriveKing07")
 HOLD_SEC = int(os.getenv("HOLD_SEC", "10"))
 SEED_DELAY = float(os.getenv("SEED_DELAY", "2"))
+SKIP_PROB = float(os.getenv("SKIP_PROB", "0.55"))
+DAILY_CAP = int(os.getenv("DAILY_CAP", "50"))
+ROOT = Path(__file__).parent
+STATE_PATH = ROOT / "STATE.json"
+LOG_PATH = ROOT / "LIVE_LOG.md"
 
-# One stable ID forever (same browser = same human). The Most-500s board
-# groups by id — rotating IDs fragments wins. Pinned: already stacking.
-STABLE_PID = os.getenv("STABLE_PID", "").strip() or "mtnm96o0kumar607"
+# One stable ID forever (same browser = same human). Fresh identity.
+STABLE_PID = os.getenv("STABLE_PID", "").strip() or "mtqh4w00cdking07"
 
-# 11 human-like XI combos, each pick pinned to (name, team) because era
-# versions carry DIFFERENT stats (e.g. AB 2010s b95/p98 vs 2000s b86/p89).
-# ALL verified vs backend win rule (gates, ranges, distinct names, <=2/draft
-# per team). Rotation looks like a human experimenting.
-COMBOS = [
+def session_drafts():
+    """Short human sessions: 4-6 drafts (5-7 on weekends)."""
+    import datetime as _d
+    wknd = _d.datetime.now(_d.timezone.utc).weekday() >= 5
+    lo, hi = (5, 7) if wknd else (4, 6)
+    return random.randint(lo, hi)
+
+def today_str():
+    import datetime as _d
+    return _d.datetime.now(_d.timezone.utc).strftime("%Y-%m-%d")
+
+def load_state():
+    try:
+        st = json.loads(STATE_PATH.read_text())
+        if st.get("date") != today_str():
+            raise ValueError("new day")
+        st.setdefault("drafts", 0)
+        st.setdefault("wins", 0)
+        st.setdefault("combos_used", [])
+        st.setdefault("xi_sigs", [])
+        return st
+    except:
+        return {"date": today_str(), "drafts": 0, "wins": 0, "combos_used": [], "xi_sigs": []}
+
+def save_state(st):
+    try:
+        STATE_PATH.write_text(json.dumps(st))
+    except:
+        pass
+
+def pick_combo(state):
+    """Random combo, preferring ones unused today (no visible pattern)."""
+    avail = [c for c in COMBOS20 if c["name"] not in state.get("combos_used", [])]
+    pool = avail or COMBOS20
+    return random.choice(pool)
+
+def gate_predict(picks_by_slot):
+    """Backend L6 gate on the actual picked XI. Returns (ok, bat, pow, att)."""
+    try:
+        t7 = picks_by_slot[:7]
+        l4 = picks_by_slot[7:11]
+        bat = sum(p["b"] for p in t7) / 7
+        pow_ = sum(p["p"] for p in t7) / 7
+        att = sum(p["bl"] for p in l4) / 4
+        wk = any("WK" in p.get("role", "") for p in picks_by_slot)
+        nb = sum(1 for p in picks_by_slot if p.get("bl", 0) >= 70)
+        return (wk and nb > 2 and bat >= 86 and pow_ >= 89 and att >= 90), bat, pow_, att
+    except:
+        return False, 0, 0, 0
+
+# 20 human-like XI combos loaded from combos20.json. Each pick is
+# (pos, name, year); the team id is resolved live by (season, roster).
+# Shuffle engine below drafts them in spin order with random slots.
+try:
+    COMBOS20 = json.loads((ROOT / "combos20.json").read_text())["combos"]
+except:
+    COMBOS20 = []
+COMBOS_FALLBACK = [
  ("Base Invincibles v2", [(1,"Rohit Sharma","india2020s"),(2,"Sachin Tendulkar","india1990s"),(3,"Virat Kohli","india2010s"),(4,"Viv Richards","westindies1980s"),(5,"AB de Villiers","southafrica2010s"),(6,"Heinrich Klaasen","southafrica2020s"),(7,"Shahid Afridi","pakistan2000s"),(8,"Wasim Akram","pakistan1990s"),(9,"Malcolm Marshall","westindies1980s"),(10,"Shane Warne","australia1990s"),(11,"Muttiah Muralitharan","srilanka1990s")]),
  ("Pace Storm v2", [(1,"Virender Sehwag","india2000s"),(2,"Sachin Tendulkar","india1990s"),(3,"Virat Kohli","india2010s"),(4,"Viv Richards","westindies1980s"),(5,"AB de Villiers","southafrica2010s"),(6,"MS Dhoni","india2000s"),(7,"Shahid Afridi","pakistan2000s"),(8,"Wasim Akram","pakistan1990s"),(9,"Malcolm Marshall","westindies1980s"),(10,"Brett Lee","australia2000s"),(11,"Muttiah Muralitharan","srilanka1990s")]),
  ("Aussie Open Blitz", [(1,"Travis Head","australia2020s"),(2,"David Warner","australia2010s"),(3,"Viv Richards","westindies1980s"),(4,"Brian Lara","westindies1990s"),(5,"Aravinda de Silva","srilanka1990s"),(6,"Heinrich Klaasen","southafrica2020s"),(7,"Lance Klusener","southafrica1990s"),(8,"Wasim Akram","pakistan1990s"),(9,"Joel Garner","westindies1980s"),(10,"Curtly Ambrose","westindies1990s"),(11,"Muttiah Muralitharan","srilanka1990s")]),
@@ -47,20 +97,98 @@ COMBOS = [
  ("Death Over Kings v2", [(1,"Pathum Nissanka","srilanka2020s"),(2,"Travis Head","australia2020s"),(3,"Virat Kohli","india2010s"),(4,"Viv Richards","westindies1980s"),(5,"Yuvraj Singh","india2000s"),(6,"MS Dhoni","india2000s"),(7,"Shahid Afridi","pakistan2000s"),(8,"Imran Khan","pakistan1990s"),(9,"Shaheen Afridi","pakistan2020s"),(10,"Jofra Archer","england2010s"),(11,"Muttiah Muralitharan","srilanka1990s")]),
  ("Version Gods", [(1,"Rohit Sharma","india2020s"),(2,"Sachin Tendulkar","india1990s"),(3,"Virat Kohli","india2010s"),(4,"Viv Richards","westindies1980s"),(5,"AB de Villiers","southafrica2010s"),(6,"Heinrich Klaasen","southafrica2020s"),(7,"Jos Buttler","england2010s"),(8,"Wasim Akram","pakistan1990s"),(9,"Malcolm Marshall","westindies1980s"),(10,"Shane Warne","australia1990s"),(11,"Muttiah Muralitharan","srilanka1990s")]),
 ]
-# Back-compat defaults (combo #1); one_draft overrides per draft.
-FIXED_XI = [(p, n) for p, n, _ in COMBOS[0][1]]
-FIXED_NAMES = [n for _, n in FIXED_XI]
+# Back-compat defaults (combo #1 names); one_draft overrides per draft.
+def _combo_names(c):
+    return [x[1] for x in c["xi"]]
+
+if not COMBOS20:
+    COMBOS20 = [{"name": n, "xi": [[p, nm, ""] for p, nm, _ in xi]} for n, xi in COMBOS_FALLBACK]
+FIXED_NAMES = _combo_names(COMBOS20[0])
 FIXED_SET = set(FIXED_NAMES)
 
 def combo_for(num):
-    """Rotate combos per draft; start offset shifts daily for variety."""
+    """Legacy rotation (kept for session preview); live drafts use pick_combo."""
     import datetime as _d2
-    off = _d2.datetime.now(_d2.timezone.utc).timetuple().tm_yday % len(COMBOS)
-    return COMBOS[(off + num - 1) % len(COMBOS)]
+    off = _d2.datetime.now(_d2.timezone.utc).timetuple().tm_yday % len(COMBOS20)
+    c = COMBOS20[(off + num - 1) % len(COMBOS20)]
+    return c["name"], [(p, n, t) for p, n, t in c["xi"]]
 
 async def jsleep(lo, hi):
     """Human-like jittered pause."""
     await asyncio.sleep(random.uniform(lo, hi))
+
+async def find_team(page, name, year=""):
+    """Resolve team id by (season year + roster). Empty year = first match."""
+    safe = name.replace("'", "\\'")
+    try:
+        return await page.evaluate(f"""() => {{
+            const No = window.__No || [];
+            const nm = '{safe}', yr = '{year}';
+            for (const t of No) {{
+                if (yr && !(String(t.season || '').toLowerCase().includes(yr.toLowerCase()))) continue;
+                if (t.players && t.players.some(p => p.n === nm)) return t.id;
+            }}
+            return '';
+        }}""")
+    except:
+        return ''
+
+async def human_click(page, locator, timeout=5000):
+    """Mouse-like click: move in steps, then click. Falls back to plain click."""
+    try:
+        box = await locator.bounding_box(timeout=timeout)
+        if not box:
+            await locator.click(timeout=timeout)
+            return
+        x0, y0 = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+        steps = random.randint(3, 7)
+        await page.mouse.move(max(0, x0 - random.randint(40, 160)), max(0, y0 - random.randint(40, 160)))
+        await page.mouse.move(x0, y0, steps=steps)
+        await jsleep(0.05, 0.35)
+        await page.mouse.click(x0, y0)
+    except:
+        try:
+            await locator.click(timeout=timeout)
+        except:
+            pass
+
+def git_push_log(msg):
+    """Commit LIVE_LOG.md + STATE.json (rebase-retry for racing sessions)."""
+    def run(*a):
+        try:
+            return subprocess.run(a, cwd=str(ROOT), capture_output=True, timeout=90)
+        except:
+            return None
+    try:
+        run("git", "add", "LIVE_LOG.md", "STATE.json")
+        r = run("git", "commit", "-m", msg)
+        if r is None or (r.returncode != 0 and b"nothing to commit" not in (r.stdout or b"") + (r.stderr or b"")):
+            if r is not None and r.returncode != 0:
+                return False
+        for _ in range(3):
+            p = run("git", "push", "origin", "main")
+            if p is not None and p.returncode == 0:
+                return True
+            run("git", "pull", "--rebase", "origin", "main")
+        return False
+    except Exception as e:
+        log(f"  logpush err: {e}")
+        return False
+
+def live_entry(state, text):
+    """Prepend entry to LIVE_LOG.md (newest on top for mobile), cap size."""
+    try:
+        header = f"# Live Draft Log — {HANDLE}\nDay {state.get('date')} (UTC): {state.get('drafts', 0)} drafts, {state.get('wins', 0)} wins\n\n"
+        old = ""
+        if LOG_PATH.exists():
+            old = LOG_PATH.read_text(encoding="utf-8", errors="ignore")
+            lines = old.split("\n")
+            body = [l for l in lines if not l.startswith("# ")]
+            old = "\n".join(body).strip()
+        entries = [l for l in (text.strip() + "\n" + old).split("\n") if l.strip() != ""]
+        LOG_PATH.write_text(header + "\n".join(entries[:260]) + "\n", encoding="utf-8")
+    except Exception as e:
+        log(f"  live_entry err: {e}")
 
 def log(m):
     print(f"[{time.strftime('%H:%M:%S')}] {m}", flush=True)
@@ -544,13 +672,15 @@ async def get_cards_from_page(page):
         log(f"  readCards err: {e}")
         return []
 
-async def one_draft(page, num):
-    combo_name, combo_xi = combo_for(num)
+async def one_draft(page, num, state):
+    combo = pick_combo(state)
+    combo_name, combo_xi = combo["name"], [(p, n, y) for p, n, y in combo["xi"]]
+    if combo_name not in state.get("combos_used", []):
+        state["combos_used"].append(combo_name)
+    plan_pos = {n: p for p, n, _ in combo_xi}
+    plan_year = {n: y for _, n, y in combo_xi}
     combo_names = [n for _, n, _ in combo_xi]
-    combo_set = set(combo_names)
-    team_map = {n: tm for _, n, tm in combo_xi}
     log(f"=== DRAFT #{num} [{combo_name}] {HANDLE} ===")
-    log(f"  XI plan: " + " | ".join(f"{p}.{n} [{tm}]" for p, n, tm in combo_xi))
     current_picks.clear()
     current_sid = None
     try:
@@ -568,58 +698,27 @@ async def one_draft(page, num):
 
     await ensure_hack(page)
     try:
-        await page.evaluate(f"() => {{ window.__FIXED_XI = {json.dumps(combo_names)}; window.__FIXED_SET = new Set({json.dumps(combo_names)}); window.__FIXED_TEAM = {json.dumps(team_map)}; }}")
+        await page.evaluate(f"() => {{ window.__FIXED_XI = {json.dumps(combo_names)}; window.__FIXED_SET = new Set({json.dumps(combo_names)}); }}")
     except:
         pass
-    new_seed = random.randint(1, 2**31 - 1)
+    # Native randomness for deals/spins (human-like); steering stays dormant.
     try:
-        await page.evaluate(f"() => window.__reseed({new_seed})")
+        await page.evaluate("() => { const h=window.__h; if(h){h.on=false; h.spinReady=false;} window.__spinRV=null; }")
     except:
         pass
-    log(f"  seed={new_seed}")
-
-    try:
-        await page.evaluate("() => { const h=window.__h; h.picked=[]; h.openSlots=[1,2,3,4,5,6,7,8,9,10,11]; h.usage={}; }")
-    except:
-        await ensure_hack(page, seed=new_seed)
 
     picks = []
-    last_squad_id = ""
-
-    for spin in range(15):
-        team_result = await page.evaluate("() => window.__chooseTeamForNextFixed()")
-        if not team_result:
-            log(f"  spin {spin+1}: no team with needed player, picking random")
-            team_result = await page.evaluate("() => { const No=window.__No,h=window.__h; if(!No)return null; const lim=window.__o6||2; let Ct=No.filter(t=>(h.usage[t.id]||0)<lim); if(!Ct.length) Ct=No; const t=Ct[Math.floor(Math.random()*Ct.length)]; return {idx:Ct.indexOf(t),poolSize:Ct.length,need:'*',team:t.name+' '+t.season,teamId:t.id}; }")
-            if not team_result:
-                log("  no teams available")
-                break
-
-        idx = team_result["idx"]
-        pool_sz = team_result["poolSize"]
-        need = team_result.get("need", "*")
-        team_id = team_result.get("teamId", "")
-        log(f"  spin {spin+1}: {team_result['team']} idx={idx}/{pool_sz} need={need}")
-
-        # Steer BOTH RNGs the game might use (x6 for final pick, Math.random
-        # for animation). Steering is deterministic: floor(v*len)=idx.
-        await page.evaluate(f"() => {{ const h=window.__h; h.spinIdx={idx}; h.spinLen={pool_sz}; h.spinReady=true; h.idx={idx}; h.poolSz={pool_sz}; h.overrideReady=true; window.__spinRV=({idx}+0.5)/{pool_sz}; }}")
-
+    open_slots = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    spin = 0
+    while len(picks) < 11 and spin < 25:
+        spin += 1
         spin_btn = page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first
         if not await spin_btn.is_visible(timeout=3000):
             log("  no SPIN button")
             break
-        await spin_btn.click(timeout=5000)
+        await human_click(page, spin_btn, timeout=5000)
         await jsleep(2.2, 3.4)
-
-        # Steering is exact, so the landed team is the targeted one.
-        try:
-            if team_id:
-                await page.evaluate(f"() => {{ const h=window.__h; h.usage['{team_id}']=(h.usage['{team_id}']||0)+1; }}")
-                last_squad_id = team_id
-            await page.evaluate("() => { window.__spinRV=null; }")
-        except:
-            pass
+        log(f"  spin {spin}: team unknown until cards (random spin)")
 
         await page.wait_for_timeout(1000)
         cards = await get_cards_from_page(page)
@@ -634,22 +733,36 @@ async def one_draft(page, num):
         card_names = [c["name"] for c in cards]
         log(f"    cards: {', '.join(card_names)}")
 
+        def fits_open(c):
+            return [s for s in open_slots if c.get("lo", 1) <= s <= c.get("hi", 11)]
+
         picked_set = set(p["name"] for p in picks)
         best = None
+        best_plan = False
         for n in combo_names:
-            if n not in picked_set:
-                for c in cards:
-                    if c["name"] == n and not c.get("disabled"):
-                        best = c
-                        break
-                if best:
+            if n in picked_set:
+                continue
+            for c in cards:
+                if c["name"] == n and not c.get("disabled") and fits_open(c):
+                    best = c
+                    best_plan = True
                     break
+            if best:
+                break
 
         if not best:
-            enabled = [c for c in cards if not c.get("disabled")]
-            if enabled:
-                enabled.sort(key=lambda c: c.get("b", 0) * 2 + c.get("p", 0), reverse=True)
-                best = enabled[0]
+            scored = []
+            for c in cards:
+                if c.get("disabled"):
+                    continue
+                fo = fits_open(c)
+                if not fo:
+                    continue
+                sc = max((c.get("b", 0) * 2 + c.get("p", 0)) if s <= 7 else c.get("bl", 0) for s in fo)
+                scored.append((sc, c))
+            if scored:
+                scored.sort(key=lambda t: t[0], reverse=True)
+                best = scored[0][1]
                 log(f"    -> {best['name']} ({best['role']} BAT{best.get('b',0)}/POW{best.get('p',0)}/BWL{best.get('bl',0)}) [FILLER]")
             else:
                 log("    no enabled cards")
@@ -657,13 +770,24 @@ async def one_draft(page, num):
         else:
             log(f"    -> {best['name']} ({best['role']} BAT{best.get('b',0)}/POW{best.get('p',0)}/BWL{best.get('bl',0)}) [FIXED]")
 
+        # Slot: planned if free+fitting, else a RANDOM fitting open slot.
+        planned = plan_pos.get(best["name"])
+        fo = fits_open(best)
+        if planned in fo:
+            slot = planned
+        elif fo:
+            slot = random.choice(fo)
+        else:
+            log("    no fitting open slot, skipping")
+            continue
+        open_slots.remove(slot)
+
         btn_idx = best.get("btnIdx", -1)
         if btn_idx >= 0:
-            await page.locator("button").nth(btn_idx).click(timeout=3000)
+            await human_click(page, page.locator("button").nth(btn_idx), timeout=3000)
         else:
-            await page.locator("button").filter(has_text=best["name"]).first.click(timeout=3000)
+            await human_click(page, page.locator("button").filter(has_text=best["name"]).first, timeout=3000)
         await jsleep(0.8, 1.6)
-        slot = None
 
         digits = await page.evaluate(r"""() => {
             const dlgs = [...document.querySelectorAll('div')].filter(d =>
@@ -686,49 +810,51 @@ async def one_draft(page, num):
         if digits:
             usable = [d["n"] for d in digits if not d["dis"] and d["op"] > 0.85]
             if usable:
-                expected_pos = None
-                for pos, nm, _ in combo_xi:
-                    if nm == best["name"]:
-                        expected_pos = pos
-                        break
-                chosen = expected_pos if expected_pos and expected_pos in usable else usable[0]
-                slot = chosen
-                log(f"       pos {chosen} among {usable}")
+                if slot not in usable:
+                    # Human taps a random available slot, not always first.
+                    slot = random.choice(usable)
+                    if slot in open_slots:
+                        open_slots.remove(slot)
+                    else:
+                        try:
+                            open_slots.remove(min(open_slots, key=lambda s: abs(s - slot)))
+                        except:
+                            pass
+                log(f"       pos {slot} among {usable}")
                 await page.evaluate(f"""() => {{
                     const dlgs=[...document.querySelectorAll('div')].filter(d=>d.className&&String(d.className).includes('fixed')&&/Choose a batting position/i.test(d.textContent||''));
                     const roots=dlgs.length?dlgs:[document];
-                    for(const root of roots) for(const b of root.querySelectorAll('button')) if((b.textContent||'').trim()==='{chosen}'&&!b.disabled){{b.click();return;}}
+                    for(const root of roots) for(const b of root.querySelectorAll('button')) if((b.textContent||'').trim()==='{slot}'&&!b.disabled){{b.click();return;}}
                 }}""")
                 await jsleep(0.4, 0.9)
 
-        squad_id = await get_squad_id(page, best["name"], team_map.get(best["name"]))
-        if not squad_id:
-            squad_id = team_map.get(best["name"]) or last_squad_id
-        pick_entry = {"name": best["name"], "b": best.get("b", 0), "p": best.get("p", 0), "bl": best.get("bl", 0), "role": map_role_from_card(best), "squadId": squad_id, "pos": slot}
+        pinned_year = plan_year.get(best["name"], "")
+        squad_id = await find_team(page, best["name"], pinned_year)
+        pick_entry = {"name": best["name"], "b": best.get("b", 0), "p": best.get("p", 0), "bl": best.get("bl", 0), "role": map_role_from_card(best), "squadId": squad_id, "pos": slot, "year": pinned_year}
         picks.append(pick_entry)
         current_picks.append(pick_entry)
-        try:
-            safe_name = best["name"].replace("'", "\\'")
-            await page.evaluate(f"() => {{ const h=window.__h; h.picked.push('{safe_name}'); if(h.openSlots.length) h.openSlots.shift(); }}")
-        except:
-            pass
 
         if len(picks) >= 11:
             break
 
-    fixed_count = sum(1 for p in picks if p["name"] in combo_set)
-    log(f"  Picked {len(picks)} players, {fixed_count}/11 from [{combo_name}]")
-    missing = [n for _, n, _ in combo_xi if n not in [p["name"] for p in picks]]
-    if missing:
-        log(f"  MISSING: {missing}")
-    pos_of = {p["name"]: i + 1 for i, p in enumerate(picks)}
-    log("  XI picked: " + " | ".join(f"{pos_of[p['name']]}.{p['name']}" for p in picks))
+    if len(picks) < 11:
+        log(f"  INCOMPLETE XI ({len(picks)}/11), abandoning draft")
+        return False
+    by_slot = sorted(picks, key=lambda p: p.get("pos") or 99)
+    fixed_count = sum(1 for p in picks if p["name"] in combo_names)
+    log(f"  Picked 11 players, {fixed_count}/11 from [{combo_name}]")
+    log("  XI picked: " + " | ".join(f"{p.get('pos')}.{p['name']}" for p in by_slot))
+    gate_ok, gbat, gpow, gatt = gate_predict(by_slot)
+    log(f"  Gate check: bat {gbat:.1f} / pow {gpow:.1f} / att {gatt:.1f} -> {'PASS (70% coin)' if gate_ok else 'likely LOSS band'}")
+    sig = "|".join(f"{p.get('pos')}:{p['name']}" for p in by_slot)
+    if sig in state.get("xi_sigs", []):
+        log("  NOTE: XI repeats an earlier today combo")
+    else:
+        state.setdefault("xi_sigs", []).append(sig)
 
-    # Stable PID all day: never rotate per draft, else count-board fragments to v=1.
-    # Game auto-seeds (E1) at 10/11 picks with Ga()=STABLE_PID — reuse ITS sid.
-    # A manual re-seed with the same id conflicts server-side (one session per id),
-    # which was causing sid=None -> submits skipped -> zero count-board wins.
-    draft_pid = STABLE_PID
+    # Identity pinned; game seeds itself (E1 at ~10 picks). No manual
+    # seed/submit: proof-less direct API calls are a server-visible marker.
+    # The game's own auto-submit (with proof) reports the win.
     await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{STABLE_PID}')")
     await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
     current_sid = None
@@ -751,22 +877,18 @@ async def one_draft(page, num):
         except:
             pass
     if not current_sid:
-        log("  no game seed captured, manual seed fallback...")
-        current_sid = await api_seed_no_xi(page, draft_pid)
-        if not current_sid:
-            log("  SEED (no xi) failed, trying with xi fallback...")
-            current_sid = await api_seed(page, draft_pid)
+        log("  no game seed captured (game auto-submit still may count it)")
     await asyncio.sleep(SEED_DELAY)
 
     log("  Simulating...")
     sim = page.locator("button").filter(has_text=re.compile(r"SIMULATE", re.I)).first
     if await sim.is_visible(timeout=5000):
-        await sim.click(timeout=5000)
+        await human_click(page, sim, timeout=5000)
         await jsleep(1.6, 2.6)
         skip = page.locator("button").filter(has_text=re.compile(r"SKIP TO END", re.I)).first
         try:
             if await skip.is_visible(timeout=3000):
-                await skip.click(timeout=3000)
+                await human_click(page, skip, timeout=3000)
         except:
             pass
         await jsleep(2.5, 4.0)
@@ -806,131 +928,112 @@ async def one_draft(page, num):
             log(f"  >>> WIN {balls_val} balls = {overs_val} overs <<<")
 
         await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
-        await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{draft_pid}')")
+        await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{STABLE_PID}')")
 
-        if current_sid:
-            await asyncio.sleep(SEED_DELAY)
-            # Fallback only: game's own auto-submit usually counts the win
-            # first; ours then fails "expired" (harmless). Either way we
-            # poll the board to confirm below.
-            ranks = await api_submit(page, draft_pid, current_sid) or {}
-            await asyncio.sleep(SEED_DELAY)
-            log(f"  SUBMIT returned: today #{ranks.get('today','?')} most #{ranks.get('most','?')}")
-            if True:
-                log(f"  Polling leaderboard until entry is confirmed...")
+        # No manual submit (proof-less POSTs are a server-visible marker).
+        # The game's own auto-submit reports the win; we just confirm below.
+        log("  Polling leaderboard until entry is confirmed...")
+        confirmed = False
+        today_e = count_e = you_e = None
+        for poll in range(8):
+            await asyncio.sleep(5)
+            try:
+                lb_check = await page.evaluate(r"""async (params) => {
+                    const {handle, pid} = params;
+                    const out = {};
+                    try {
+                        const r = await fetch('""" + LB_URL + r"""/board?window=today');
+                        if (r.ok) {
+                            const d = await r.json();
+                            const entries = d.top || [];
+                            const idx = entries.findIndex(e => e.handle === handle);
+                            if (idx >= 0) out['today'] = {rank: idx+1, balls: entries[idx].balls, runs: entries[idx].runs};
+                            else out['today'] = null;
+                        }
+                    } catch(e) {}
+                    try {
+                        const r = await fetch('""" + LB_URL + r"""/count?window=today&id=' + encodeURIComponent(pid));
+                        if (r.ok) {
+                            const d = await r.json();
+                            if (d.you) out['you'] = d.you;
+                        }
+                    } catch(e) {}
+                    return out;
+                }""", {"handle": HANDLE, "pid": STABLE_PID})
+                today_e = lb_check.get("today")
+                you_e = lb_check.get("you")
+                if today_e or you_e:
+                    parts = []
+                    if today_e: parts.append(f"fastest #{today_e['rank']} ({today_e['balls']} balls)")
+                    if you_e: parts.append(f"my id wins={you_e.get('entry', {}).get('v', you_e.get('v', '?'))}")
+                    log(f"  CONFIRMED! {', '.join(parts)}")
+                    confirmed = True
+                    break
+                else:
+                    log(f"  Poll {poll+1}/8: pending...")
+            except Exception as e:
+                log(f"  Poll {poll+1} err: {e}")
+        if not confirmed:
+            log("  Leaderboard not confirmed yet (cache?), proceeding anyway")
 
-                log("  Polling leaderboard until entry is confirmed...")
-                confirmed = False
-                for poll in range(20):
-                    await asyncio.sleep(5)
-                    try:
-                        lb_check = await page.evaluate(r"""async (params) => {
-                            const {handle, pid} = params;
-                            const out = {};
-                            for (const w of ['today','most']) {
-                                try {
-                                    const r = await fetch('""" + LB_URL + r"""/board?window=' + w);
-                                    if (r.ok) {
-                                        const d = await r.json();
-                                        const entries = d.top || [];
-                                        const idx = entries.findIndex(e => e.handle === handle);
-                                        if (idx >= 0) out[w] = {rank: idx+1, balls: entries[idx].balls, runs: entries[idx].runs};
-                                        else out[w] = null;
-                                    }
-                                } catch(e) {}
-                            }
-                            try {
-                                const r = await fetch('""" + LB_URL + r"""/count?window=today');
-                                if (r.ok) {
-                                    const d = await r.json();
-                                    const entries = d.top || [];
-                                    const idx = entries.findIndex(e => e.handle === handle);
-                                    if (idx >= 0) out['count'] = {rank: idx+1, wins: entries[idx].v, id: entries[idx].id};
-                                    else out['count'] = null;
-                                }
-                            } catch(e) {}
-                            try {
-                                const r = await fetch('""" + LB_URL + r"""/count?window=today&id=' + encodeURIComponent(pid));
-                                if (r.ok) {
-                                    const d = await r.json();
-                                    if (d.you) out['you'] = d.you;
-                                    else if (d.count) out['you'] = {v: d.count};
-                                }
-                            } catch(e) {}
-                            return out;
-                        }""", {"handle": HANDLE, "pid": STABLE_PID})
-                        today_e = lb_check.get("today")
-                        most_e = lb_check.get("most")
-                        count_e = lb_check.get("count")
-                        you_e = lb_check.get("you")
-                        if today_e or count_e or you_e:
-                            parts = []
-                            if today_e: parts.append(f"fastest #{today_e['rank']} ({today_e['balls']} balls)")
-                            if count_e: parts.append(f"most 500s #{count_e['rank']} ({count_e['wins']} wins)")
-                            if you_e: parts.append(f"my id wins={you_e.get('v', you_e)}")
-                            log(f"  CONFIRMED! {', '.join(parts)}")
-                            confirmed = True
-                            break
-                        else:
-                            log(f"  Poll {poll+1}/20: pending...")
-                    except Exception as e:
-                        log(f"  Poll {poll+1} err: {e}")
-                if not confirmed:
-                    log("  Leaderboard not confirmed after 100s, proceeding anyway")
-
-                try:
-                    ss_lb = SHOTS_DIR / f"d{num}_leaderboard.png"
-                    await page.screenshot(path=str(ss_lb), full_page=True)
-                    log(f"  Saved screenshot: {ss_lb.name}")
-                except:
-                    pass
-
-                log(f"  +-- SCORECARD draft#{num} [{combo_name}] --")
-                log(f"  | {score_val} in {overs_val} ov ({balls_val} balls) - HISTORY REWRITTEN")
-                log(f"  +-- rank fastest #{ranks.get('today','?')} - waiting for count poll --")
-                hold = HOLD_SEC + random.randint(0, 8)
-                log(f"  Waiting {hold}s before next draft...")
-                await page.wait_for_timeout(hold * 1000)
-        else:
-            log("  no sid, skipping submit")
+        log(f"  +-- SCORECARD draft#{num} [{combo_name}] --")
+        log(f"  | {score_val} in {overs_val} ov ({balls_val} balls) - HISTORY REWRITTEN")
+        log(f"  +-- {HANDLE} day wins growing, see LIVE_LOG.md --")
+        hold = HOLD_SEC + random.randint(0, 8)
+        log(f"  Waiting {hold}s before next draft...")
+        await page.wait_for_timeout(hold * 1000)
 
     if "HISTORY REWRITTEN" not in body:
         for kw in ["CHOKED", "HEARTBREAK", "OUTCLASSED", "UNPREPARED"]:
             if kw in body:
                 log(f"  +-- SCORECARD draft#{num} [{combo_name}] --")
                 log(f"  | {score_val} - {kw}")
-                log(f"  +-- no submit, moving on --")
+                log(f"  +-- loss, moving on --")
                 break
 
     again = page.locator("button").filter(has_text=re.compile(r"DRAFT AGAIN", re.I)).first
     try:
         if await again.is_visible(timeout=3000):
-            await again.click(timeout=3000)
+            await human_click(page, again, timeout=3000)
             await asyncio.sleep(2)
         else:
             await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
             await page.wait_for_timeout(2000)
             await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
-            await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{draft_pid}')")
+            await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{STABLE_PID}')")
             easy = page.locator("button").filter(has_text=re.compile(r"EASY", re.I)).first
             if await easy.is_visible(timeout=5000):
-                await easy.click(timeout=5000, force=True)
+                await human_click(page, easy, timeout=5000)
                 await asyncio.sleep(0.5)
             draft = page.locator("button").filter(has_text=re.compile(r"^DRAFT$", re.I)).first
             if await draft.is_visible(timeout=5000):
-                await draft.click(timeout=5000, force=True)
+                await human_click(page, draft, timeout=5000)
                 await asyncio.sleep(2)
     except:
         pass
     return "HISTORY REWRITTEN" in body
 
 async def main():
-    log(f"spin_fixed11.py 10-COMBO rotation: {', '.join(n for n, _ in COMBOS)}")
-    log(f"HANDLE={HANDLE} drafts_planned={MAX_DRAFTS} pid={STABLE_PID}")
-    log("Session: " + " > ".join(f"d{i+1}:{combo_for(i+1)[0]}" for i in range(MAX_DRAFTS)))
+    state = load_state()
+    log(f"spin_fixed11.py SHUFFLE engine: {len(COMBOS20)} combos, {HANDLE}, day={state['date']}")
+    log(f"Day so far: {state['drafts']}/{DAILY_CAP} drafts, {state['wins']} wins")
+    if state["drafts"] >= DAILY_CAP:
+        log("Daily 50-draft cap reached, resting this session.")
+        return
+    if random.random() < SKIP_PROB:
+        log(f"Session skipped by random draw (SKIP_PROB={SKIP_PROB}) — keeps timing patternless.")
+        return
+    delay = random.randint(0, 600)
+    log(f"Random start delay {delay}s ...")
+    await asyncio.sleep(delay)
+    n_planned = min(session_drafts(), DAILY_CAP - load_state()["drafts"])
+    state = load_state()
+    log(f"Session plan: {n_planned} drafts, pid={STABLE_PID}")
     async with async_playwright() as pw:
-        browser = await pw.chromium.launch(headless=False, args=["--window-size=480,1000"])
-        ctx = await browser.new_context(viewport={"width": 480, "height": 1000}, device_scale_factor=2)
+        browser = await pw.chromium.launch(headless=False,
+            args=["--window-size=1366,768", "--disable-blink-features=AutomationControlled"],
+            ignore_default_args=["--enable-automation"])
+        ctx = await browser.new_context(viewport={"width": 1366, "height": 768}, device_scale_factor=1)
         page = await ctx.new_page()
         await setup_route_interception(page)
         await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
@@ -968,50 +1071,38 @@ async def main():
 
         easy = page.locator("button").filter(has_text=re.compile(r"EASY", re.I)).first
         if await easy.is_visible(timeout=5000):
-            await easy.click(timeout=5000, force=True)
+            await human_click(page, easy, timeout=5000)
             await asyncio.sleep(0.5)
         draft = page.locator("button").filter(has_text=re.compile(r"^DRAFT$", re.I)).first
         if await draft.is_visible(timeout=5000):
-            await draft.click(timeout=5000, force=True)
+            await human_click(page, draft, timeout=5000)
             await asyncio.sleep(2)
-        log("Entered draft - infinite loop")
+        log("Entered draft loop")
 
         wins = 0
-        for i in range(1, MAX_DRAFTS + 1):
-            won = await one_draft(page, i)
+        for i in range(1, n_planned + 1):
+            st = load_state()
+            if st["drafts"] >= DAILY_CAP:
+                log("Daily cap hit mid-session, stopping.")
+                break
+            won = await one_draft(page, st["drafts"] + 1, st)
+            st = load_state()
+            st["drafts"] += 1
             if won:
                 wins += 1
-            log(f"Progress: {wins}/{i} wins best {best_balls[0]} balls")
+                st["wins"] += 1
+            save_state(st)
+            import datetime as _dt
+            ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+            entry = f"## {ts} — Draft #{st['drafts']} [{'WIN' if won else 'loss'}]\n"
+            live_entry(st, entry)
+            git_push_log(f"live: draft {st['drafts']} {'win' if won else 'loss'} {ts}")
+            log(f"Progress: session {wins}/{i} wins best {best_balls[0]} balls | day {st['wins']}/{st['drafts']}")
 
-        log(f"=== DONE {wins}/{MAX_DRAFTS} wins best {best_balls[0]} ===")
-
-        log("=== LEADERBOARD VERIFICATION ===")
-        try:
-            import urllib.request, urllib.parse
-            for endpoint in [("board", "today"), ("board", "most"), ("count", "today")]:
-                kind, window = endpoint
-                url = f"{LB_URL}/{kind}?window={window}"
-                req = urllib.request.Request(url)
-                resp = urllib.request.urlopen(req, timeout=15)
-                data = json.loads(resp.read())
-                entries = data.get("top", [])
-                found = [e for e in entries if e.get("handle") == HANDLE]
-                if found:
-                    e = found[0]
-                    if kind == "count":
-                        log(f"  {kind}/{window}: handle={e['handle']} wins={e.get('v',0)} id={e.get('id','')[:12]}")
-                    else:
-                        log(f"  {kind}/{window}: #{entries.index(e)+1} handle={e['handle']} balls={e['balls']} runs={e['runs']}")
-                else:
-                    log(f"  {kind}/{window}: NOT FOUND in top {len(entries)}")
-            # Direct check of OUR stable id (count groups by id, not handle)
-            url = f"{LB_URL}/count?window=today&id={urllib.parse.quote(STABLE_PID)}"
-            req = urllib.request.Request(url)
-            resp = urllib.request.urlopen(req, timeout=15)
-            data = json.loads(resp.read())
-            log(f"  count/today?id=STABLE_PID: you={data.get('you')} count={data.get('count')} top_n={len(data.get('top',[]))}")
-        except Exception as e:
-            log(f"  verification err: {e}")
+        st = load_state()
+        log(f"=== DONE session {wins} wins | day {st['wins']}/{st['drafts']} best {best_balls[0]} ===")
+        live_entry(st, f"## session end — day {st['wins']}/{st['drafts']}")
+        git_push_log(f"live: session end day {st['wins']}/{st['drafts']}")
 
         await page.wait_for_timeout(3000)
         await browser.close()
