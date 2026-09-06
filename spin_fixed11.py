@@ -82,7 +82,7 @@ def gen_pid():
 
 async def api_seed(page, pid):
     """Register team with leaderboard via POST /seed, return sid or None."""
-    xi_payload = [{"n": p["name"], "sq": p.get("squadId", "")} for p in current_picks]
+    xi_payload = [{"n": p["name"], "sq": p.get("squadId", "")} for p in ordered_picks()]
     log(f"  SEED xi sample: {json.dumps(xi_payload[:3])}... ({len(xi_payload)} players)")
     for attempt in range(3):
         try:
@@ -124,7 +124,7 @@ async def api_submit(page, pid, sid):
     """Submit win to leaderboard via POST /submit, return ranks or None."""
     for attempt in range(3):
         try:
-            xi_payload = [{"n": p["name"], "r": p.get("role", "BAT"), "sq": p.get("squadId", "")} for p in current_picks]
+            xi_payload = [{"n": p["name"], "r": p.get("role", "BAT"), "sq": p.get("squadId", "")} for p in ordered_picks()]
             result = await page.evaluate(r"""async (params) => {
                 const {pid, handle, sid, xi} = params;
                 try {
@@ -166,6 +166,11 @@ def map_role_from_card(card):
     if r == "ALL-ROUNDER": return "AR"
     if r == "BOWLER": return "BWL"
     return "BAT"
+
+def ordered_picks():
+    """XI in batting-slot order (pos 1-11). Backend L6 slices [0:7]/[7:11],
+    so pick-order would scramble the averages and get 'not a 500' rejects."""
+    return sorted(current_picks, key=lambda p: (p.get("pos") is None, p.get("pos") or 99))
 
 async def get_squad_id(page, player_name):
     """Search __No for a player and return the first matching team's ID."""
@@ -582,6 +587,7 @@ async def one_draft(page, num):
         else:
             await page.locator("button").filter(has_text=best["name"]).first.click(timeout=3000)
         await jsleep(0.8, 1.6)
+        slot = None
 
         digits = await page.evaluate(r"""() => {
             const dlgs = [...document.querySelectorAll('div')].filter(d =>
@@ -610,6 +616,7 @@ async def one_draft(page, num):
                         expected_pos = pos
                         break
                 chosen = expected_pos if expected_pos and expected_pos in usable else usable[0]
+                slot = chosen
                 log(f"       pos {chosen} among {usable}")
                 await page.evaluate(f"""() => {{
                     const dlgs=[...document.querySelectorAll('div')].filter(d=>d.className&&String(d.className).includes('fixed')&&/Choose a batting position/i.test(d.textContent||''));
@@ -621,7 +628,7 @@ async def one_draft(page, num):
         squad_id = await get_squad_id(page, best["name"])
         if not squad_id:
             squad_id = last_squad_id
-        pick_entry = {"name": best["name"], "b": best.get("b", 0), "p": best.get("p", 0), "bl": best.get("bl", 0), "role": map_role_from_card(best), "squadId": squad_id}
+        pick_entry = {"name": best["name"], "b": best.get("b", 0), "p": best.get("p", 0), "bl": best.get("bl", 0), "role": map_role_from_card(best), "squadId": squad_id, "pos": slot}
         picks.append(pick_entry)
         current_picks.append(pick_entry)
         try:
