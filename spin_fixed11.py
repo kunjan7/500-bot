@@ -148,7 +148,7 @@ async def human_click(page, locator, timeout=5000):
         await page.mouse.click(x0, y0)
     except:
         try:
-            await locator.click(timeout=timeout)
+            await locator.click(timeout=timeout, force=True)
         except:
             pass
 
@@ -839,7 +839,7 @@ async def one_draft(page, num, state):
 
     if len(picks) < 11:
         log(f"  INCOMPLETE XI ({len(picks)}/11), abandoning draft")
-        return False
+        return False, False
     by_slot = sorted(picks, key=lambda p: p.get("pos") or 99)
     fixed_count = sum(1 for p in picks if p["name"] in combo_names)
     log(f"  Picked 11 players, {fixed_count}/11 from [{combo_name}]")
@@ -1011,7 +1011,7 @@ async def one_draft(page, num, state):
                 await asyncio.sleep(2)
     except:
         pass
-    return "HISTORY REWRITTEN" in body
+    return ("HISTORY REWRITTEN" in body), True
 
 async def main():
     state = load_state()
@@ -1077,6 +1077,25 @@ async def main():
         if await draft.is_visible(timeout=5000):
             await human_click(page, draft, timeout=5000)
             await asyncio.sleep(2)
+        # Verify we actually reached the draft screen; retry once if not.
+        spin_ok = False
+        for _ in range(2):
+            try:
+                if await page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first.is_visible(timeout=4000):
+                    spin_ok = True
+                    break
+            except:
+                pass
+            try:
+                if await draft.is_visible(timeout=3000):
+                    await human_click(page, draft, timeout=5000)
+                    await asyncio.sleep(2)
+            except:
+                pass
+        if not spin_ok:
+            log("FAIL: draft screen never appeared, aborting session")
+            await browser.close()
+            return
         log("Entered draft loop")
 
         wins = 0
@@ -1085,9 +1104,9 @@ async def main():
             if st["drafts"] >= DAILY_CAP:
                 log("Daily cap hit mid-session, stopping.")
                 break
-            won = await one_draft(page, st["drafts"] + 1, st)
-            st = load_state()
-            st["drafts"] += 1
+            won, completed = await one_draft(page, st["drafts"] + 1, st)
+            if completed:
+                st["drafts"] += 1
             if won:
                 wins += 1
                 st["wins"] += 1
