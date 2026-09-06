@@ -133,6 +133,35 @@ async def find_team(page, name, year=""):
     except:
         return ''
 
+async def enter_draft(page):
+    """Robust draft entry: dump buttons, click EASY-ish then DRAFT-ish, verify SPIN."""
+    for attempt in range(3):
+        try:
+            btns = await page.evaluate("() => [...document.querySelectorAll('button')].map(b => (b.innerText||'').trim().replace(/\\s+/g,' ').slice(0,30))")
+        except:
+            btns = []
+        log(f"  entry try{attempt}: url={(page.url if hasattr(page,'url') else '?')[:60]} buttons={btns[:14]}")
+        try:
+            easy = page.locator("button").filter(has_text=re.compile(r"EASY|MEDIUM|HARD", re.I)).first
+            if await easy.is_visible(timeout=2500):
+                await human_click(page, easy, timeout=4000)
+                await asyncio.sleep(0.7)
+        except:
+            pass
+        try:
+            go = page.locator("button").filter(has_text=re.compile(r"DRAFT|PLAY|START|CHASE", re.I)).first
+            if await go.is_visible(timeout=2500):
+                await human_click(page, go, timeout=4000)
+                await asyncio.sleep(2)
+        except:
+            pass
+        try:
+            if await page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first.is_visible(timeout=4000):
+                return True
+        except:
+            pass
+    return False
+
 async def human_click(page, locator, timeout=5000):
     """Mouse-like click: move in steps, then click. Falls back to plain click."""
     try:
@@ -1001,14 +1030,8 @@ async def one_draft(page, num, state):
             await page.wait_for_timeout(2000)
             await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
             await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{STABLE_PID}')")
-            easy = page.locator("button").filter(has_text=re.compile(r"EASY", re.I)).first
-            if await easy.is_visible(timeout=5000):
-                await human_click(page, easy, timeout=5000)
-                await asyncio.sleep(0.5)
-            draft = page.locator("button").filter(has_text=re.compile(r"^DRAFT$", re.I)).first
-            if await draft.is_visible(timeout=5000):
-                await human_click(page, draft, timeout=5000)
-                await asyncio.sleep(2)
+            if not await enter_draft(page):
+                log("  re-entry failed, will retry next draft")
     except:
         pass
     return ("HISTORY REWRITTEN" in body), True
@@ -1069,30 +1092,7 @@ async def main():
         await page.evaluate(js)
         log(f"Hack injected seed={seed}")
 
-        easy = page.locator("button").filter(has_text=re.compile(r"EASY", re.I)).first
-        if await easy.is_visible(timeout=5000):
-            await human_click(page, easy, timeout=5000)
-            await asyncio.sleep(0.5)
-        draft = page.locator("button").filter(has_text=re.compile(r"^DRAFT$", re.I)).first
-        if await draft.is_visible(timeout=5000):
-            await human_click(page, draft, timeout=5000)
-            await asyncio.sleep(2)
-        # Verify we actually reached the draft screen; retry once if not.
-        spin_ok = False
-        for _ in range(2):
-            try:
-                if await page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first.is_visible(timeout=4000):
-                    spin_ok = True
-                    break
-            except:
-                pass
-            try:
-                if await draft.is_visible(timeout=3000):
-                    await human_click(page, draft, timeout=5000)
-                    await asyncio.sleep(2)
-            except:
-                pass
-        if not spin_ok:
+        if not await enter_draft(page):
             log("FAIL: draft screen never appeared, aborting session")
             await browser.close()
             return
