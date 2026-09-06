@@ -233,6 +233,13 @@ async def api_seed_no_xi(page, pid):
             return None
     return None
 
+async def fulfill_text(route, resp, txt, ctype):
+    """Fulfill with decoded text: MUST drop content-encoding/length from the
+    original response or the browser mis-decodes the body and the script dies."""
+    headers = {k: v for k, v in resp.headers.items()
+               if k.lower() not in ("content-encoding", "content-length", "transfer-encoding")}
+    await route.fulfill(status=resp.status, headers=headers, body=txt, content_type=ctype)
+
 async def setup_route_interception(page):
     async def lb_log(route):
         req = route.request
@@ -245,8 +252,8 @@ async def setup_route_interception(page):
         try:
             txt = await resp.text()
             log(f"  [LB RESP] {resp.status} {txt[:500]}")
-            await route.fulfill(response=resp, body=txt,
-                content_type=resp.headers.get("content-type", "application/json"))
+            await fulfill_text(route, resp, txt,
+                resp.headers.get("content-type", "application/json"))
         except:
             await route.continue_()
 
@@ -275,8 +282,8 @@ async def setup_route_interception(page):
                         log(f"  [GAME SEED] no sid (status={resp.status} body={txt[:120]})")
                 except:
                     log(f"  [GAME SEED] unparseable (status={resp.status} body={txt[:120]})")
-                await route.fulfill(response=resp, body=txt,
-                    content_type=resp.headers.get("content-type", "application/json"))
+                await fulfill_text(route, resp, txt,
+                    resp.headers.get("content-type", "application/json"))
             except:
                 await route.continue_()
         except:
@@ -288,35 +295,42 @@ async def setup_route_interception(page):
     await page.route("**/seed", seed_cap)
 
     async def intercept(route):
-        resp = await route.fetch()
-        body = await resp.text()
-        if "window.__No" not in body:
-            # Legacy anchors (older bundle variant).
-            body = body.replace(
-                "],wt=(t,l,e)=>Math.max(l,Math.min(e,t));",
-                "];window.__No=No;window.__o6=o6;window.__S6=S6;window.__A6=A6;wt=(t,l,e)=>Math.max(l,Math.min(e,t));")
-            body = body.replace(
-                "No[Math.floor(Math.random()*No.length)]",
-                "(window.__gamePool=No,window.__lastSpinResult=No[Math.floor(Math.random()*No.length)])")
-            # Variant-proof: discover the pool var by its data signature
-            # (stable across minifier renames) and expose/wrap it.
-            m = re.search(r'((?:var|let|const)\s+[A-Za-z_$][\w$]*\s*=\s*\[)\{id\s*:\s*"pakistan1990s"', body)
-            if m:
-                pv = re.search(r'[A-Za-z_$][\w$]*', m.group(0).split('=', 1)[0].split()[-1]).group(0)
-                before = body
-                body = body.replace(m.group(0), m.group(1) + 'window.__No=[' + '{id:"pakistan1990s"', 1)
-                spin_pat = pv + '[Math.floor(Math.random()*' + pv + '.length)]'
-                if spin_pat in body:
-                    body = body.replace(spin_pat,
-                        '(window.__gamePool=' + pv + ',window.__lastSpinResult=' + spin_pat + ')')
-                    log(f"  intercept: dynamic pool var={pv} (exposed + spin wrapped)")
+        try:
+            resp = await route.fetch()
+            body = await resp.text()
+            if "window.__No" not in body:
+                # Legacy anchors (older bundle variant).
+                body = body.replace(
+                    "],wt=(t,l,e)=>Math.max(l,Math.min(e,t));",
+                    "];window.__No=No;window.__o6=o6;window.__S6=S6;window.__A6=A6;wt=(t,l,e)=>Math.max(l,Math.min(e,t));")
+                body = body.replace(
+                    "No[Math.floor(Math.random()*No.length)]",
+                    "(window.__gamePool=No,window.__lastSpinResult=No[Math.floor(Math.random()*No.length)])")
+                # Variant-proof: discover the pool var by its data signature
+                # (stable across minifier renames) and expose/wrap it.
+                m = re.search(r'((?:var|let|const)\s+[A-Za-z_$][\w$]*\s*=\s*\[)\{id\s*:\s*"pakistan1990s"', body)
+                if m:
+                    pv = re.search(r'[A-Za-z_$][\w$]*', m.group(0).split('=', 1)[0].split()[-1]).group(0)
+                    before = body
+                    body = body.replace(m.group(0), m.group(1) + 'window.__No=[' + '{id:"pakistan1990s"', 1)
+                    spin_pat = pv + '[Math.floor(Math.random()*' + pv + '.length)]'
+                    if spin_pat in body:
+                        body = body.replace(spin_pat,
+                            '(window.__gamePool=' + pv + ',window.__lastSpinResult=' + spin_pat + ')')
+                        log(f"  intercept: dynamic pool var={pv} (exposed + spin wrapped)")
+                    else:
+                        log(f"  intercept: dynamic pool var={pv} exposed, spin line not found")
+                    if body == before:
+                        log("  intercept WARN: dynamic replace changed nothing")
                 else:
-                    log(f"  intercept: dynamic pool var={pv} exposed, spin line not found")
-                if body == before:
-                    log("  intercept WARN: dynamic replace changed nothing")
-            else:
-                log("  intercept WARN: pool signature not found, spins uncontrolled")
-        await route.fulfill(response=resp, body=body, content_type="application/javascript")
+                    log("  intercept WARN: pool signature not found, spins uncontrolled")
+            await fulfill_text(route, resp, body, "application/javascript")
+        except Exception as e:
+            log(f"  intercept err (passing through): {e}")
+            try:
+                await route.continue_()
+            except:
+                pass
 
     await page.route("**/*app*.js", intercept)
 
@@ -896,9 +910,23 @@ async def main():
         await page.evaluate(f"() => {{ localStorage.setItem('five-hundred-handle','{HANDLE}'); localStorage.setItem('five-hundred-pid','{STABLE_PID}'); }}")
         log(f"Initial PID {STABLE_PID} (pinned forever)")
 
-        ok = await page.evaluate("() => !!window.__No")
+        ok = False
+        for _ in range(20):
+            try:
+                if await page.evaluate("() => !!window.__No && window.__No.length > 30"):
+                    ok = True
+                    break
+            except:
+                pass
+            await page.wait_for_timeout(500)
         log(f"Capture No={'OK' if ok else 'MISS'}")
         if not ok:
+            try:
+                title = await page.title()
+                nkeys = await page.evaluate("() => Object.keys(window).length")
+                log(f"  diag: title={title!r} window_keys={nkeys}")
+            except Exception as e:
+                log(f"  diag err: {e}")
             log("FAIL: could not capture teams")
             await browser.close()
             return
