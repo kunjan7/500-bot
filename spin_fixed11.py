@@ -30,23 +30,25 @@ SEED_DELAY = float(os.getenv("SEED_DELAY", "2"))
 # groups by id — rotating IDs fragments wins. Pinned: already stacking.
 STABLE_PID = os.getenv("STABLE_PID", "").strip() or "mtnm96o0kumar607"
 
-# 10 human-like XI combos. ALL verified vs backend win rule
-# (top7 bat>=86 & pow>=89, last4 bl>=90). Rotation looks like a human
-# experimenting: openers change, 3/4/5 shuffle, bowlers/AR rotate.
+# 11 human-like XI combos, each pick pinned to (name, team) because era
+# versions carry DIFFERENT stats (e.g. AB 2010s b95/p98 vs 2000s b86/p89).
+# ALL verified vs backend win rule (gates, ranges, distinct names, <=2/draft
+# per team). Rotation looks like a human experimenting.
 COMBOS = [
- ("Base Invincibles", [(1,"Rohit Sharma"),(2,"Sachin Tendulkar"),(3,"Virat Kohli"),(4,"Viv Richards"),(5,"AB de Villiers"),(6,"Heinrich Klaasen"),(7,"Shahid Afridi"),(8,"Wasim Akram"),(9,"Malcolm Marshall"),(10,"Shane Warne"),(11,"Muttiah Muralitharan")]),
- ("Pace Storm", [(1,"Virender Sehwag"),(2,"Sachin Tendulkar"),(3,"Virat Kohli"),(4,"Viv Richards"),(5,"AB de Villiers"),(6,"MS Dhoni"),(7,"Shahid Afridi"),(8,"Wasim Akram"),(9,"Malcolm Marshall"),(10,"Brett Lee"),(11,"Muttiah Muralitharan")]),
- ("Aussie Open Blitz", [(1,"Travis Head"),(2,"David Warner"),(3,"Viv Richards"),(4,"Brian Lara"),(5,"Aravinda de Silva"),(6,"Heinrich Klaasen"),(7,"Lance Klusener"),(8,"Wasim Akram"),(9,"Joel Garner"),(10,"Curtly Ambrose"),(11,"Muttiah Muralitharan")]),
- ("Spin Twin Kings", [(1,"Chris Gayle"),(2,"Jonny Bairstow"),(3,"Sachin Tendulkar"),(4,"Viv Richards"),(5,"Daryl Mitchell"),(6,"Yuvraj Singh"),(7,"Shahid Afridi"),(8,"Imran Khan"),(9,"Waqar Younis"),(10,"Shoaib Akhtar"),(11,"Jasprit Bumrah")]),
- ("Protea Wall", [(1,"Quinton de Kock"),(2,"Saeed Anwar"),(3,"Sachin Tendulkar"),(4,"Viv Richards"),(5,"Jacques Kallis"),(6,"Heinrich Klaasen"),(7,"Shahid Afridi"),(8,"Shaun Pollock"),(9,"Allan Donald"),(10,"Dale Steyn"),(11,"Glenn McGrath")]),
- ("Young Guns", [(1,"Rohit Sharma"),(2,"Shubman Gill"),(3,"Virat Kohli"),(4,"Viv Richards"),(5,"Harry Brook"),(6,"MS Dhoni"),(7,"Lance Klusener"),(8,"Rashid Khan"),(9,"Jasprit Bumrah"),(10,"Jofra Archer"),(11,"Trent Boult")]),
- ("Roy Experiment", [(1,"Virender Sehwag"),(2,"Jason Roy"),(3,"Sachin Tendulkar"),(4,"Viv Richards"),(5,"AB de Villiers"),(6,"Heinrich Klaasen"),(7,"Shahid Afridi"),(8,"Wasim Akram"),(9,"Mitchell Starc"),(10,"Shane Bond"),(11,"Saeed Ajmal")]),
- ("Kiwi Grit", [(1,"David Warner"),(2,"Martin Guptill"),(3,"Brian Lara"),(4,"Viv Richards"),(5,"AB de Villiers"),(6,"MS Dhoni"),(7,"Shahid Afridi"),(8,"Anil Kumble"),(9,"Shane Warne"),(10,"Muttiah Muralitharan"),(11,"Glenn McGrath")]),
- ("Lankan Lions", [(1,"Saeed Anwar"),(2,"Fakhar Zaman"),(3,"Viv Richards"),(4,"Aravinda de Silva"),(5,"Daryl Mitchell"),(6,"Heinrich Klaasen"),(7,"Shahid Afridi"),(8,"Wasim Akram"),(9,"Saqlain Mushtaq"),(10,"Imran Tahir"),(11,"Muttiah Muralitharan")]),
- ("Death Over Kings", [(1,"Pathum Nissanka"),(2,"Travis Head"),(3,"Virat Kohli"),(4,"Viv Richards"),(5,"Yuvraj Singh"),(6,"MS Dhoni"),(7,"Shahid Afridi"),(8,"Imran Khan"),(9,"Shaheen Afridi"),(10,"Jofra Archer"),(11,"Muttiah Muralitharan")]),
+ ("Base Invincibles v2", [(1,"Rohit Sharma","india2020s"),(2,"Sachin Tendulkar","india1990s"),(3,"Virat Kohli","india2010s"),(4,"Viv Richards","westindies1980s"),(5,"AB de Villiers","southafrica2010s"),(6,"Heinrich Klaasen","southafrica2020s"),(7,"Shahid Afridi","pakistan2000s"),(8,"Wasim Akram","pakistan1990s"),(9,"Malcolm Marshall","westindies1980s"),(10,"Shane Warne","australia1990s"),(11,"Muttiah Muralitharan","srilanka1990s")]),
+ ("Pace Storm v2", [(1,"Virender Sehwag","india2000s"),(2,"Sachin Tendulkar","india1990s"),(3,"Virat Kohli","india2010s"),(4,"Viv Richards","westindies1980s"),(5,"AB de Villiers","southafrica2010s"),(6,"MS Dhoni","india2000s"),(7,"Shahid Afridi","pakistan2000s"),(8,"Wasim Akram","pakistan1990s"),(9,"Malcolm Marshall","westindies1980s"),(10,"Brett Lee","australia2000s"),(11,"Muttiah Muralitharan","srilanka1990s")]),
+ ("Aussie Open Blitz", [(1,"Travis Head","australia2020s"),(2,"David Warner","australia2010s"),(3,"Viv Richards","westindies1980s"),(4,"Brian Lara","westindies1990s"),(5,"Aravinda de Silva","srilanka1990s"),(6,"Heinrich Klaasen","southafrica2020s"),(7,"Lance Klusener","southafrica1990s"),(8,"Wasim Akram","pakistan1990s"),(9,"Joel Garner","westindies1980s"),(10,"Curtly Ambrose","westindies1990s"),(11,"Muttiah Muralitharan","srilanka1990s")]),
+ ("Spin Twin Kings v2", [(1,"Chris Gayle","westindies2010s"),(2,"Jonny Bairstow","england2010s"),(3,"Sachin Tendulkar","india1990s"),(4,"Viv Richards","westindies1980s"),(5,"Daryl Mitchell","newzealand2020s"),(6,"Yuvraj Singh","india2000s"),(7,"Shahid Afridi","pakistan2000s"),(8,"Imran Khan","pakistan1990s"),(9,"Waqar Younis","pakistan1990s"),(10,"Shoaib Akhtar","pakistan2000s"),(11,"Jasprit Bumrah","india2020s")]),
+ ("Protea Wall v2", [(1,"Quinton de Kock","southafrica2010s"),(2,"Saeed Anwar","pakistan1990s"),(3,"Sachin Tendulkar","india1990s"),(4,"Viv Richards","westindies1980s"),(5,"Jacques Kallis","southafrica1990s"),(6,"Heinrich Klaasen","southafrica2020s"),(7,"Shahid Afridi","pakistan2000s"),(8,"Shaun Pollock","southafrica2000s"),(9,"Kagiso Rabada","southafrica2020s"),(10,"Dale Steyn","southafrica2010s"),(11,"Glenn McGrath","australia2000s")]),
+ ("Young Guns v2", [(1,"Rohit Sharma","india2020s"),(2,"Shubman Gill","india2020s"),(3,"Virat Kohli","india2010s"),(4,"Viv Richards","westindies1980s"),(5,"Harry Brook","england2020s"),(6,"MS Dhoni","india2000s"),(7,"Lance Klusener","southafrica1990s"),(8,"Rashid Khan","afghanistan2020s"),(9,"Jasprit Bumrah","india2010s"),(10,"Jofra Archer","england2010s"),(11,"Trent Boult","newzealand2020s")]),
+ ("Roy Experiment v2", [(1,"Virender Sehwag","india2000s"),(2,"Jason Roy","england2010s"),(3,"Sachin Tendulkar","india1990s"),(4,"Viv Richards","westindies1980s"),(5,"AB de Villiers","southafrica2010s"),(6,"Heinrich Klaasen","southafrica2020s"),(7,"Shahid Afridi","pakistan2000s"),(8,"Wasim Akram","pakistan1990s"),(9,"Mitchell Starc","australia2010s"),(10,"Shane Bond","newzealand2000s"),(11,"Saeed Ajmal","pakistan2010s")]),
+ ("Kiwi Grit v2", [(1,"David Warner","australia2010s"),(2,"Martin Guptill","newzealand2010s"),(3,"Brian Lara","westindies1990s"),(4,"Viv Richards","westindies1980s"),(5,"AB de Villiers","southafrica2010s"),(6,"MS Dhoni","india2000s"),(7,"Shahid Afridi","pakistan2000s"),(8,"Anil Kumble","india1990s"),(9,"Shane Warne","australia1990s"),(10,"Muttiah Muralitharan","srilanka1990s"),(11,"Glenn McGrath","australia2000s")]),
+ ("Lankan Lions v2", [(1,"Saeed Anwar","pakistan1990s"),(2,"Fakhar Zaman","pakistan2020s"),(3,"Viv Richards","westindies1980s"),(4,"Aravinda de Silva","srilanka1990s"),(5,"Daryl Mitchell","newzealand2020s"),(6,"Heinrich Klaasen","southafrica2020s"),(7,"Shahid Afridi","pakistan2000s"),(8,"Wasim Akram","pakistan1990s"),(9,"Saeed Ajmal","pakistan2010s"),(10,"Imran Tahir","southafrica2010s"),(11,"Muttiah Muralitharan","srilanka1990s")]),
+ ("Death Over Kings v2", [(1,"Pathum Nissanka","srilanka2020s"),(2,"Travis Head","australia2020s"),(3,"Virat Kohli","india2010s"),(4,"Viv Richards","westindies1980s"),(5,"Yuvraj Singh","india2000s"),(6,"MS Dhoni","india2000s"),(7,"Shahid Afridi","pakistan2000s"),(8,"Imran Khan","pakistan1990s"),(9,"Shaheen Afridi","pakistan2020s"),(10,"Jofra Archer","england2010s"),(11,"Muttiah Muralitharan","srilanka1990s")]),
+ ("Version Gods", [(1,"Rohit Sharma","india2020s"),(2,"Sachin Tendulkar","india1990s"),(3,"Virat Kohli","india2010s"),(4,"Viv Richards","westindies1980s"),(5,"AB de Villiers","southafrica2010s"),(6,"Heinrich Klaasen","southafrica2020s"),(7,"Jos Buttler","england2010s"),(8,"Wasim Akram","pakistan1990s"),(9,"Malcolm Marshall","westindies1980s"),(10,"Shane Warne","australia1990s"),(11,"Muttiah Muralitharan","srilanka1990s")]),
 ]
 # Back-compat defaults (combo #1); one_draft overrides per draft.
-FIXED_XI = COMBOS[0][1]
+FIXED_XI = [(p, n) for p, n, _ in COMBOS[0][1]]
 FIXED_NAMES = [n for _, n in FIXED_XI]
 FIXED_SET = set(FIXED_NAMES)
 
@@ -172,20 +174,27 @@ def ordered_picks():
     so pick-order would scramble the averages and get 'not a 500' rejects."""
     return sorted(current_picks, key=lambda p: (p.get("pos") is None, p.get("pos") or 99))
 
-async def get_squad_id(page, player_name):
-    """Search __No for a player and return the first matching team's ID."""
+async def get_squad_id(page, player_name, pinned=None):
+    """Return pinned team's ID if it holds the player, else first match."""
     escaped = player_name.replace("'", "\\'")
+    pin = (pinned or "").replace("'", "\\'")
     try:
         return await page.evaluate(f"""() => {{
             const No = window.__No;
             if (!No) return '';
+            const pin = '{pin}';
+            if (pin) {{
+                for (const t of No) {{
+                    if (t.id === pin && t.players && t.players.some(p => p.n === '{escaped}')) return t.id;
+                }}
+            }}
             for (const t of No) {{
                 if (t.players && t.players.some(p => p.n === '{escaped}')) return t.id;
             }}
             return '';
         }}""")
     except:
-        return ''
+        return pinned or ''
 
 async def api_seed_no_xi(page, pid):
     """Register with leaderboard via POST /seed without xi (fallback)."""
@@ -326,6 +335,11 @@ INJECT_HACK_JS = r"""
                 return t.players.some(p=>p.n===name && slots.some(s=>s>=p.r[0]&&s<=p.r[1]))
                     && (h.usage[t.id]||0)<lim;
             });
+            const wantTeam=(window.__FIXED_TEAM||{})[name];
+            if(wantTeam){
+                const exact=pool.filter(t=>t.id===wantTeam);
+                if(exact.length) pool=exact;
+            }
             if(pool.length){
                 const idx=No.indexOf(pool[0]);
                 return {idx, poolSize:pool.length, need:name, team:pool[0].name+" "+pool[0].season};
@@ -475,10 +489,11 @@ async def get_cards_from_page(page):
 
 async def one_draft(page, num):
     combo_name, combo_xi = combo_for(num)
-    combo_names = [n for _, n in combo_xi]
+    combo_names = [n for _, n, _ in combo_xi]
     combo_set = set(combo_names)
+    team_map = {n: tm for _, n, tm in combo_xi}
     log(f"=== DRAFT #{num} [{combo_name}] {HANDLE} ===")
-    log(f"  XI plan: " + " | ".join(f"{p}.{n}" for p, n in combo_xi))
+    log(f"  XI plan: " + " | ".join(f"{p}.{n} [{tm}]" for p, n, tm in combo_xi))
     current_picks.clear()
     current_sid = None
     try:
@@ -496,7 +511,7 @@ async def one_draft(page, num):
 
     await ensure_hack(page)
     try:
-        await page.evaluate(f"() => {{ window.__FIXED_XI = {json.dumps(combo_names)}; window.__FIXED_SET = new Set({json.dumps(combo_names)}); }}")
+        await page.evaluate(f"() => {{ window.__FIXED_XI = {json.dumps(combo_names)}; window.__FIXED_SET = new Set({json.dumps(combo_names)}); window.__FIXED_TEAM = {json.dumps(team_map)}; }}")
     except:
         pass
     new_seed = random.randint(1, 2**31 - 1)
@@ -611,7 +626,7 @@ async def one_draft(page, num):
             usable = [d["n"] for d in digits if not d["dis"] and d["op"] > 0.85]
             if usable:
                 expected_pos = None
-                for pos, nm in combo_xi:
+                for pos, nm, _ in combo_xi:
                     if nm == best["name"]:
                         expected_pos = pos
                         break
@@ -625,9 +640,9 @@ async def one_draft(page, num):
                 }}""")
                 await jsleep(0.4, 0.9)
 
-        squad_id = await get_squad_id(page, best["name"])
+        squad_id = await get_squad_id(page, best["name"], team_map.get(best["name"]))
         if not squad_id:
-            squad_id = last_squad_id
+            squad_id = team_map.get(best["name"]) or last_squad_id
         pick_entry = {"name": best["name"], "b": best.get("b", 0), "p": best.get("p", 0), "bl": best.get("bl", 0), "role": map_role_from_card(best), "squadId": squad_id, "pos": slot}
         picks.append(pick_entry)
         current_picks.append(pick_entry)
@@ -642,7 +657,7 @@ async def one_draft(page, num):
 
     fixed_count = sum(1 for p in picks if p["name"] in combo_set)
     log(f"  Picked {len(picks)} players, {fixed_count}/11 from [{combo_name}]")
-    missing = [n for _, n in combo_xi if n not in [p["name"] for p in picks]]
+    missing = [n for _, n, _ in combo_xi if n not in [p["name"] for p in picks]]
     if missing:
         log(f"  MISSING: {missing}")
     pos_of = {p["name"]: i + 1 for i, p in enumerate(picks)}
