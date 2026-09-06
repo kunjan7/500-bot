@@ -310,6 +310,11 @@ async def setup_route_interception(page):
                 # (stable across minifier renames) and expose/wrap it.
                 # group(1) EXCLUDES the '[' -> `var Lo=window.__No=[{...}]`
                 # (aliased, brackets balanced). Including it nests/breaks.
+                xhook = 'Ct[Math.floor(x6()*Ct.length)]'
+                if xhook in body:
+                    body = body.replace(xhook,
+                        'Ct[Math.floor((window.__spinRV!=null?window.__spinRV:x6())*Ct.length)]')
+                    log("  intercept: x6 spin hook installed")
                 m = re.search(r'((?:var|let|const)\s+[A-Za-z_$][\w$]*\s*=\s*)\[\{id\s*:\s*"pakistan1990s"', body)
                 if m:
                     pv = re.search(r'[A-Za-z_$][\w$]*', m.group(1).split('=', 1)[0].split()[-1]).group(0)
@@ -358,27 +363,44 @@ INJECT_HACK_JS = r"""
     };
     window.__FIXED_XI = FIXED_JSON_PLACEHOLDER;
     window.__FIXED_SET = new Set(FIXED_JSON_PLACEHOLDER);
+    // New bundle picks the final team via x6() (global hookable RNG),
+    // NOT Math.random. Override it; per-spin targeting via Ct mirror below.
+    if(!window.__x6wrapped && typeof window.x6==='function'){
+        window.__origx6 = window.x6;
+        window.__x6wrapped = true;
+        window.x6 = function(){
+            const h=window.__h;
+            if(h && h.on && h.spinReady && h.spinIdx>=0){
+                const v=(h.spinIdx+0.5)/h.spinLen;
+                h.spinIdx=-1; h.spinReady=false;
+                return Math.min(Math.max(v,1e-6),0.999999);
+            }
+            return window.__origx6();
+        };
+    }
     window.__chooseTeamForNextFixed = function(){
         const No=window.__No, h=window.__h;
         if(!No||!h) return null;
         const picked=new Set(h.picked);
         const slots=[...h.openSlots];
         const lim=window.__o6||2;
+        // Mirror game's Ct: teams with an unpicked player fitting open slots,
+        // preferring under-limit teams (game falls back to full list).
+        let Ct=No.filter(t=>t.players.some(p=>!picked.has(p.n)&&slots.some(s=>s>=p.r[0]&&s<=p.r[1])));
+        const yl=Ct.filter(t=>(h.usage[t.id]||0)<lim);
+        if(yl.length) Ct=yl;
+        if(!Ct.length) return null;
         for(const name of window.__FIXED_XI){
             if(picked.has(name)) continue;
-            let pool=No.filter(t=>{
-                return t.players.some(p=>p.n===name && slots.some(s=>s>=p.r[0]&&s<=p.r[1]))
-                    && (h.usage[t.id]||0)<lim;
-            });
+            let cand=Ct.filter(t=>t.players.some(p=>p.n===name&&slots.some(s=>s>=p.r[0]&&s<=p.r[1])));
+            if(!cand.length) continue;
             const wantTeam=(window.__FIXED_TEAM||{})[name];
             if(wantTeam){
-                const exact=pool.filter(t=>t.id===wantTeam);
-                if(exact.length) pool=exact;
+                const exact=cand.filter(t=>t.id===wantTeam);
+                if(exact.length) cand=exact;
             }
-            if(pool.length){
-                const idx=No.indexOf(pool[0]);
-                return {idx, poolSize:pool.length, need:name, team:pool[0].name+" "+pool[0].season};
-            }
+            const team=cand[0];
+            return {idx:Ct.indexOf(team), poolSize:Ct.length, need:name, team:team.name+" "+team.season, teamId:team.id};
         }
         return null;
     };
@@ -568,7 +590,7 @@ async def one_draft(page, num):
         team_result = await page.evaluate("() => window.__chooseTeamForNextFixed()")
         if not team_result:
             log(f"  spin {spin+1}: no team with needed player, picking random")
-            team_result = await page.evaluate("() => { const No=window.__No,h=window.__h; if(!No)return null; const lim=window.__o6||2; const avail=No.filter(t=>(h.usage[t.id]||0)<lim); if(!avail.length)return null; const t=avail[Math.floor(Math.random()*avail.length)]; return {idx:No.indexOf(t),poolSize:avail.length,need:'*',team:t.name+' '+t.season}; }")
+            team_result = await page.evaluate("() => { const No=window.__No,h=window.__h; if(!No)return null; const lim=window.__o6||2; let Ct=No.filter(t=>(h.usage[t.id]||0)<lim); if(!Ct.length) Ct=No; const t=Ct[Math.floor(Math.random()*Ct.length)]; return {idx:Ct.indexOf(t),poolSize:Ct.length,need:'*',team:t.name+' '+t.season,teamId:t.id}; }")
             if not team_result:
                 log("  no teams available")
                 break
@@ -576,9 +598,12 @@ async def one_draft(page, num):
         idx = team_result["idx"]
         pool_sz = team_result["poolSize"]
         need = team_result.get("need", "*")
+        team_id = team_result.get("teamId", "")
         log(f"  spin {spin+1}: {team_result['team']} idx={idx}/{pool_sz} need={need}")
 
-        await page.evaluate(f"() => {{ const h=window.__h; h.idx={idx}; h.poolSz={pool_sz}; h.overrideReady=true; }}")
+        # Steer BOTH RNGs the game might use (x6 for final pick, Math.random
+        # for animation). Steering is deterministic: floor(v*len)=idx.
+        await page.evaluate(f"() => {{ const h=window.__h; h.spinIdx={idx}; h.spinLen={pool_sz}; h.spinReady=true; h.idx={idx}; h.poolSz={pool_sz}; h.overrideReady=true; window.__spinRV=({idx}+0.5)/{pool_sz}; }}")
 
         spin_btn = page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first
         if not await spin_btn.is_visible(timeout=3000):
@@ -587,11 +612,12 @@ async def one_draft(page, num):
         await spin_btn.click(timeout=5000)
         await jsleep(2.2, 3.4)
 
+        # Steering is exact, so the landed team is the targeted one.
         try:
-            sel = await page.evaluate("() => { const r=window.__lastSpinResult; return r?{id:r.id,name:r.name}:null; }")
-            if sel:
-                await page.evaluate(f"() => {{ const h=window.__h; h.usage['{sel['id']}']=(h.usage['{sel['id']}']||0)+1; }}")
-                last_squad_id = sel["id"]
+            if team_id:
+                await page.evaluate(f"() => {{ const h=window.__h; h.usage['{team_id}']=(h.usage['{team_id}']||0)+1; }}")
+                last_squad_id = team_id
+            await page.evaluate("() => { window.__spinRV=null; }")
         except:
             pass
 
