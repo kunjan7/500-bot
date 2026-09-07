@@ -134,13 +134,20 @@ async def find_team(page, name, year=""):
         return ''
 
 async def enter_draft(page):
-    """Draft entry: close popup, keep EASY, click the exact DRAFT button, verify SPIN."""
+    """Draft entry: if SPIN is already up, touch nothing. Else close popup,
+    keep EASY, click the exact DRAFT button (Play is a dead end; × on the
+    draft screen EXITS the draft, so never touch it there)."""
     for attempt in range(3):
         try:
             btns = await page.evaluate("() => [...document.querySelectorAll('button')].map(b => (b.innerText||'').trim().replace(/\\s+/g,' ').slice(0,30))")
         except:
             btns = []
         log(f"  entry try{attempt}: buttons={btns[:14]}")
+        try:
+            if await page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first.is_visible(timeout=1500):
+                return True
+        except:
+            pass
         try:
             x = page.locator("button").filter(has_text=re.compile(r"^×$")).first
             if await x.is_visible(timeout=1500):
