@@ -1107,7 +1107,7 @@ async def main():
     if state["drafts"] >= DAILY_CAP:
         log("Daily 50-draft cap reached, resting this session.")
         return
-    if random.random() < SKIP_PROB:
+    if os.getenv("GITHUB_EVENT_NAME", "") == "schedule" and random.random() < SKIP_PROB:
         log(f"Session skipped by random draw (SKIP_PROB={SKIP_PROB}) — keeps timing patternless.")
         return
     delay = random.randint(0, int(os.getenv("START_DELAY_MAX", "120")))
