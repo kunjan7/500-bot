@@ -805,26 +805,35 @@ async def one_draft(page, num, state):
     spin = 0
     while len(picks) < 11 and spin < 25:
         spin += 1
-        if not await vclick(page, "SPIN", timeout=8000):
-            try:
-                dbg = await page.evaluate("() => { const bs=[...document.querySelectorAll('button')].map(b=>({t:(b.innerText||'').trim().replace(/\\s+/g,' ').slice(0,24)})); return {url: location.href.slice(0,60), btns: bs.slice(0,18)}; }")
-                log(f"  no-SPIN diag: {json.dumps(dbg)[:320]}")
-            except Exception as e:
-                log(f"  no-SPIN diag err: {e}")
-            if not picks and await vclick(page, "DRAFT AGAIN", exact=False, timeout=3000):
-                await asyncio.sleep(2)
-                continue
-            log("  no SPIN button")
-            break
-        await jsleep(2.2, 3.4)
-        log(f"  spin {spin}: team unknown until cards (random spin)")
-
-        await page.wait_for_timeout(1000)
-        cards = await get_cards_from_page(page)
-        if not cards:
-            log("    no cards found, waiting more...")
-            await page.wait_for_timeout(2000)
+        spun = await vclick(page, "SPIN", timeout=8000)
+        cards = []
+        if spun:
+            await jsleep(2.2, 3.4)
+            log(f"  spin {spin}: team unknown until cards (random spin)")
+            await page.wait_for_timeout(1000)
             cards = await get_cards_from_page(page)
+            if not cards:
+                log("    no cards found, waiting more...")
+                await page.wait_for_timeout(2000)
+                cards = await get_cards_from_page(page)
+        else:
+            # No SPIN: a pick may be pending game-side (cards + RE-ROLL showing).
+            # Complete it from the shown cards instead of dying.
+            await page.wait_for_timeout(1000)
+            cards = await get_cards_from_page(page)
+            if cards:
+                log("    (no SPIN — completing pending pick from shown cards)")
+            else:
+                try:
+                    dbg = await page.evaluate("() => { const bs=[...document.querySelectorAll('button')].map(b=>({t:(b.innerText||'').trim().replace(/\\s+/g,' ').slice(0,24)})); return {url: location.href.slice(0,60), btns: bs.slice(0,18)}; }")
+                    log(f"  no-SPIN diag: {json.dumps(dbg)[:320]}")
+                except Exception as e:
+                    log(f"  no-SPIN diag err: {e}")
+                if not picks and await vclick(page, "DRAFT AGAIN", exact=False, timeout=3000):
+                    await asyncio.sleep(2)
+                    continue
+                log("  no SPIN button")
+                break
         if not cards:
             log("    still no cards, skipping spin")
             continue
@@ -910,20 +919,25 @@ async def one_draft(page, num, state):
                 if slot not in usable:
                     # Human taps a random available slot, not always first.
                     slot = random.choice(usable)
-                    if slot in open_slots:
-                        open_slots.remove(slot)
-                    else:
-                        try:
-                            open_slots.remove(min(open_slots, key=lambda s: abs(s - slot)))
-                        except:
-                            pass
+                if slot in open_slots:
+                    open_slots.remove(slot)
                 log(f"       pos {slot} among {usable}")
-                await page.evaluate(f"""() => {{
-                    const dlgs=[...document.querySelectorAll('div')].filter(d=>d.className&&String(d.className).includes('fixed')&&/Choose a batting position/i.test(d.textContent||''));
-                    const roots=dlgs.length?dlgs:[document];
-                    for(const root of roots) for(const b of root.querySelectorAll('button')) if((b.textContent||'').trim()==='{slot}'&&!b.disabled&&b.getClientRects().length){{b.click();return;}}
-                }}""")
-                await jsleep(0.4, 0.9)
+                for _try in range(2):
+                    await page.evaluate(f"""() => {{
+                        const dlgs=[...document.querySelectorAll('div')].filter(d=>d.className&&String(d.className).includes('fixed')&&/Choose a batting position/i.test(d.textContent||''));
+                        const roots=dlgs.length?dlgs:[document];
+                        for(const root of roots) for(const b of root.querySelectorAll('button')) if((b.textContent||'').trim()==='{slot}'&&!b.disabled&&b.getClientRects().length){{b.click();return;}}
+                    }}""")
+                    await jsleep(0.4, 0.9)
+                    try:
+                        still = await page.evaluate("""() => {
+                            const dlgs=[...document.querySelectorAll('div')].filter(d=>d.className&&String(d.className).includes('fixed')&&/Choose a batting position/i.test(d.textContent||''));
+                            return dlgs.length;
+                        }""")
+                        if not still:
+                            break
+                    except:
+                        break
 
         pinned_year = plan_year.get(best["name"], "")
         squad_id = await find_team(page, best["name"], pinned_year)
@@ -935,7 +949,12 @@ async def one_draft(page, num, state):
             break
 
     if len(picks) < 11:
-        log(f"  INCOMPLETE XI ({len(picks)}/11), abandoning draft")
+        log(f"  INCOMPLETE XI ({len(picks)}/11), resetting for next draft")
+        try:
+            if await vclick(page, "DRAFT AGAIN", exact=False, timeout=4000):
+                await asyncio.sleep(2)
+        except:
+            pass
         return False, False
     by_slot = sorted(picks, key=lambda p: p.get("pos") or 99)
     fixed_count = sum(1 for p in picks if p["name"] in combo_names)
