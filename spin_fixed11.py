@@ -134,46 +134,45 @@ async def find_team(page, name, year=""):
         return ''
 
 async def enter_draft(page):
-    """Draft entry: if SPIN is already up, touch nothing. Else close popup,
-    keep EASY, click the exact DRAFT button (Play is a dead end; × on the
-    draft screen EXITS the draft, so never touch it there)."""
+    """Draft entry: EASY, exact DRAFT, verify SPIN. Never touches × anywhere
+    (on the draft screen it exits the draft). Exceptions are logged, not hid."""
     for attempt in range(3):
         try:
             btns = await page.evaluate("() => [...document.querySelectorAll('button')].map(b => (b.innerText||'').trim().replace(/\\s+/g,' ').slice(0,30))")
-        except:
+        except Exception as e:
             btns = []
+            log(f"  entry try{attempt}: dump err {e}")
+            continue
         log(f"  entry try{attempt}: buttons={btns[:14]}")
         try:
-            if await page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first.is_visible(timeout=1500):
+            if await page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first.is_visible(timeout=2000):
                 return True
-        except:
-            pass
-        try:
-            x = page.locator("button").filter(has_text=re.compile(r"^×$")).first
-            if await x.is_visible(timeout=1500):
-                await x.click(timeout=3000, force=True)
-                await asyncio.sleep(0.5)
-        except:
-            pass
+        except Exception as e:
+            log(f"  entry try{attempt}: spin-check err {type(e).__name__}: {str(e)[:160]}")
         try:
             easy = page.locator("button").filter(has_text=re.compile(r"^EASY", re.I)).first
             if await easy.is_visible(timeout=1500):
                 await human_click(page, easy, timeout=4000)
                 await asyncio.sleep(0.7)
-        except:
-            pass
+        except Exception as e:
+            log(f"  entry try{attempt}: easy err {type(e).__name__}: {str(e)[:120]}")
         try:
             go = page.locator("button").filter(has_text=re.compile(r"^DRAFT$", re.I)).first
             if await go.is_visible(timeout=2500):
                 await human_click(page, go, timeout=4000)
                 await asyncio.sleep(2)
-        except:
-            pass
+        except Exception as e:
+            log(f"  entry try{attempt}: draft err {type(e).__name__}: {str(e)[:120]}")
         try:
-            if await page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first.is_visible(timeout=4000):
+            if await page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first.is_visible(timeout=5000):
                 return True
-        except:
-            pass
+        except Exception as e:
+            log(f"  entry try{attempt}: spin-verify err {type(e).__name__}: {str(e)[:160]}")
+    try:
+        await page.screenshot(path=str(SHOTS_DIR / "entry_fail.png"), full_page=False)
+        log("  saved entry_fail.png (see artifact)")
+    except Exception as e:
+        log(f"  screenshot err: {e}")
     return False
 
 async def human_click(page, locator, timeout=5000):
