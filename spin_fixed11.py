@@ -134,22 +134,29 @@ async def find_team(page, name, year=""):
         return ''
 
 async def enter_draft(page):
-    """Robust draft entry: dump buttons, click EASY-ish then DRAFT-ish, verify SPIN."""
+    """Draft entry: close popup, keep EASY, click the exact DRAFT button, verify SPIN."""
     for attempt in range(3):
         try:
             btns = await page.evaluate("() => [...document.querySelectorAll('button')].map(b => (b.innerText||'').trim().replace(/\\s+/g,' ').slice(0,30))")
         except:
             btns = []
-        log(f"  entry try{attempt}: url={(page.url if hasattr(page,'url') else '?')[:60]} buttons={btns[:14]}")
+        log(f"  entry try{attempt}: buttons={btns[:14]}")
         try:
-            easy = page.locator("button").filter(has_text=re.compile(r"EASY|MEDIUM|HARD", re.I)).first
-            if await easy.is_visible(timeout=2500):
+            x = page.locator("button").filter(has_text=re.compile(r"^×$")).first
+            if await x.is_visible(timeout=1500):
+                await x.click(timeout=3000, force=True)
+                await asyncio.sleep(0.5)
+        except:
+            pass
+        try:
+            easy = page.locator("button").filter(has_text=re.compile(r"^EASY", re.I)).first
+            if await easy.is_visible(timeout=1500):
                 await human_click(page, easy, timeout=4000)
                 await asyncio.sleep(0.7)
         except:
             pass
         try:
-            go = page.locator("button").filter(has_text=re.compile(r"DRAFT|PLAY|START|CHASE", re.I)).first
+            go = page.locator("button").filter(has_text=re.compile(r"^DRAFT$", re.I)).first
             if await go.is_visible(timeout=2500):
                 await human_click(page, go, timeout=4000)
                 await asyncio.sleep(2)
