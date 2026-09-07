@@ -134,8 +134,8 @@ async def find_team(page, name, year=""):
         return ''
 
 async def enter_draft(page):
-    """Draft entry: EASY, exact DRAFT, verify SPIN. Never touches × anywhere
-    (on the draft screen it exits the draft). Exceptions are logged, not hid."""
+    """Draft entry: EASY, exact DRAFT, verify SPIN. Duplicate-markup safe
+    (always targets the visible button). Never touches × (exits drafts)."""
     for attempt in range(3):
         try:
             btns = await page.evaluate("() => [...document.querySelectorAll('button')].map(b => (b.innerText||'').trim().replace(/\\s+/g,' ').slice(0,30))")
@@ -145,27 +145,27 @@ async def enter_draft(page):
             continue
         log(f"  entry try{attempt}: buttons={btns[:14]}")
         try:
-            if await page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first.is_visible(timeout=2000):
+            if await vvisible(page, "SPIN"):
                 return True
         except Exception as e:
             log(f"  entry try{attempt}: spin-check err {type(e).__name__}: {str(e)[:160]}")
         try:
-            easy = page.locator("button").filter(has_text=re.compile(r"^EASY", re.I)).first
-            if await easy.is_visible(timeout=1500):
-                await human_click(page, easy, timeout=4000)
+            if await vvisible(page, "EASY", exact=False):
+                await vclick(page, "EASY", exact=False)
                 await asyncio.sleep(0.7)
         except Exception as e:
             log(f"  entry try{attempt}: easy err {type(e).__name__}: {str(e)[:120]}")
         try:
-            go = page.locator("button").filter(has_text=re.compile(r"^DRAFT$", re.I)).first
-            if await go.is_visible(timeout=2500):
-                await human_click(page, go, timeout=4000)
+            if await vvisible(page, "DRAFT"):
+                await vclick(page, "DRAFT")
                 await asyncio.sleep(2)
         except Exception as e:
             log(f"  entry try{attempt}: draft err {type(e).__name__}: {str(e)[:120]}")
         try:
-            if await page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first.is_visible(timeout=5000):
-                return True
+            if await vvisible(page, "SPIN"):
+                await asyncio.sleep(1)
+                if await vvisible(page, "SPIN"):
+                    return True
         except Exception as e:
             log(f"  entry try{attempt}: spin-verify err {type(e).__name__}: {str(e)[:160]}")
     try:
@@ -193,6 +193,55 @@ async def human_click(page, locator, timeout=5000):
             await locator.click(timeout=timeout, force=True)
         except:
             pass
+
+async def find_visible_button(page, text, exact=True):
+    """nth-index of first VISIBLE+ENABLED button matching text (dup markup safe)."""
+    try:
+        return await page.evaluate("""(p) => {
+            const {t, exact} = p;
+            const btns=[...document.querySelectorAll('button')];
+            for(let i=0;i<btns.length;i++){
+                const b=btns[i];
+                const it=(b.innerText||'').trim();
+                if(exact ? it!==t : it.indexOf(t)<0) continue;
+                if(b.disabled) continue;
+                const r=b.getBoundingClientRect();
+                if(r.width<2||r.height<2) continue;
+                const cs=getComputedStyle(b);
+                if(cs.visibility==='hidden'||cs.display==='none') continue;
+                if(parseFloat(cs.opacity||'1')<0.3) continue;
+                return i;
+            }
+            return -1;
+        }""", {"t": text, "exact": exact})
+    except:
+        return -1
+
+async def vclick(page, text, exact=True, timeout=5000):
+    """Human click on the VISIBLE button matching text. Returns bool."""
+    idx = await find_visible_button(page, text, exact)
+    if idx is None or idx < 0:
+        return False
+    loc = page.locator("button").nth(idx)
+    try:
+        box = await loc.bounding_box(timeout=2000)
+        if box:
+            x0, y0 = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+            await page.mouse.move(max(0, x0 - random.randint(30, 120)), max(0, y0 - random.randint(30, 120)))
+            await page.mouse.move(x0, y0, steps=random.randint(2, 5))
+            await jsleep(0.05, 0.25)
+            await page.mouse.click(x0, y0)
+            return True
+    except:
+        pass
+    try:
+        await loc.click(timeout=timeout, force=True)
+        return True
+    except:
+        return False
+
+async def vvisible(page, text, exact=True):
+    return (await find_visible_button(page, text, exact)) >= 0
 
 def git_push_log(msg):
     """Commit LIVE_LOG.md + STATE.json (rebase-retry for racing sessions)."""
@@ -671,6 +720,8 @@ async def get_cards_from_page(page):
             const seen = new Set();
             const btns = document.querySelectorAll('button');
             for (const b of btns) {
+                const r0 = b.getBoundingClientRect();
+                if (r0.width < 2 || r0.height < 2) continue;
                 const t = (b.innerText || '').trim();
                 if (!/BATTER|BOWLER|ALL-ROUNDER|WK/.test(t)) continue;
                 const st = b.getAttribute('style') || '';
@@ -733,7 +784,7 @@ async def one_draft(page, num, state):
     for _ in range(10):
         try:
             await page.wait_for_timeout(500)
-            if await page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first.is_visible(timeout=800):
+            if await vvisible(page, "SPIN"):
                 break
         except:
             pass
@@ -754,11 +805,9 @@ async def one_draft(page, num, state):
     spin = 0
     while len(picks) < 11 and spin < 25:
         spin += 1
-        spin_btn = page.locator("button").filter(has_text=re.compile(r"^SPIN$", re.I)).first
-        if not await spin_btn.is_visible(timeout=3000):
+        if not await vclick(page, "SPIN", timeout=8000):
             log("  no SPIN button")
             break
-        await human_click(page, spin_btn, timeout=5000)
         await jsleep(2.2, 3.4)
         log(f"  spin {spin}: team unknown until cards (random spin)")
 
@@ -824,11 +873,9 @@ async def one_draft(page, num, state):
             continue
         open_slots.remove(slot)
 
-        btn_idx = best.get("btnIdx", -1)
-        if btn_idx >= 0:
-            await human_click(page, page.locator("button").nth(btn_idx), timeout=3000)
-        else:
-            await human_click(page, page.locator("button").filter(has_text=best["name"]).first, timeout=3000)
+        if not await vclick(page, best["name"], exact=False, timeout=5000):
+            log(f"    could not click {best['name']}, skipping spin")
+            continue
         await jsleep(0.8, 1.6)
 
         digits = await page.evaluate(r"""() => {
@@ -923,14 +970,12 @@ async def one_draft(page, num, state):
     await asyncio.sleep(SEED_DELAY)
 
     log("  Simulating...")
-    sim = page.locator("button").filter(has_text=re.compile(r"SIMULATE", re.I)).first
-    if await sim.is_visible(timeout=5000):
-        await human_click(page, sim, timeout=5000)
+    if await vvisible(page, "SIMULATE", exact=False):
+        await vclick(page, "SIMULATE", exact=False)
         await jsleep(1.6, 2.6)
-        skip = page.locator("button").filter(has_text=re.compile(r"SKIP TO END", re.I)).first
         try:
-            if await skip.is_visible(timeout=3000):
-                await human_click(page, skip, timeout=3000)
+            if await vvisible(page, "SKIP TO END", exact=False):
+                await vclick(page, "SKIP TO END", exact=False)
         except:
             pass
         await jsleep(2.5, 4.0)
@@ -1033,10 +1078,8 @@ async def one_draft(page, num, state):
                 log(f"  +-- loss, moving on --")
                 break
 
-    again = page.locator("button").filter(has_text=re.compile(r"DRAFT AGAIN", re.I)).first
     try:
-        if await again.is_visible(timeout=3000):
-            await human_click(page, again, timeout=3000)
+        if await vclick(page, "DRAFT AGAIN", exact=False, timeout=3000):
             await asyncio.sleep(2)
         else:
             await page.goto(BASE_URL, wait_until="domcontentloaded", timeout=30000)
