@@ -1046,7 +1046,7 @@ async def main():
     if random.random() < SKIP_PROB:
         log(f"Session skipped by random draw (SKIP_PROB={SKIP_PROB}) — keeps timing patternless.")
         return
-    delay = random.randint(0, 600)
+    delay = random.randint(0, int(os.getenv("START_DELAY_MAX", "120")))
     log(f"Random start delay {delay}s ...")
     await asyncio.sleep(delay)
     n_planned = min(session_drafts(), DAILY_CAP - load_state()["drafts"])
