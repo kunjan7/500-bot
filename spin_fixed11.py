@@ -806,6 +806,14 @@ async def one_draft(page, num, state):
     while len(picks) < 11 and spin < 25:
         spin += 1
         if not await vclick(page, "SPIN", timeout=8000):
+            try:
+                dbg = await page.evaluate("() => { const bs=[...document.querySelectorAll('button')].map(b=>({t:(b.innerText||'').trim().replace(/\\s+/g,' ').slice(0,24)})); return {url: location.href.slice(0,60), btns: bs.slice(0,18)}; }")
+                log(f"  no-SPIN diag: {json.dumps(dbg)[:320]}")
+            except Exception as e:
+                log(f"  no-SPIN diag err: {e}")
+            if not picks and await vclick(page, "DRAFT AGAIN", exact=False, timeout=3000):
+                await asyncio.sleep(2)
+                continue
             log("  no SPIN button")
             break
         await jsleep(2.2, 3.4)
@@ -913,7 +921,7 @@ async def one_draft(page, num, state):
                 await page.evaluate(f"""() => {{
                     const dlgs=[...document.querySelectorAll('div')].filter(d=>d.className&&String(d.className).includes('fixed')&&/Choose a batting position/i.test(d.textContent||''));
                     const roots=dlgs.length?dlgs:[document];
-                    for(const root of roots) for(const b of root.querySelectorAll('button')) if((b.textContent||'').trim()==='{slot}'&&!b.disabled){{b.click();return;}}
+                    for(const root of roots) for(const b of root.querySelectorAll('button')) if((b.textContent||'').trim()==='{slot}'&&!b.disabled&&b.getClientRects().length){{b.click();return;}}
                 }}""")
                 await jsleep(0.4, 0.9)
 
