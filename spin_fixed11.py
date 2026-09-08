@@ -218,11 +218,16 @@ async def find_visible_button(page, text, exact=True):
         return -1
 
 async def vclick(page, text, exact=True, timeout=5000):
-    """Human click on the VISIBLE button matching text. Returns bool."""
+    """Human click on the VISIBLE button matching text. Scrolls into view
+    first (missed off-screen clicks fail silently otherwise). Returns bool."""
     idx = await find_visible_button(page, text, exact)
     if idx is None or idx < 0:
         return False
     loc = page.locator("button").nth(idx)
+    try:
+        await loc.scroll_into_view_if_needed(timeout=3000)
+    except:
+        pass
     try:
         box = await loc.bounding_box(timeout=2000)
         if box:
@@ -232,6 +237,11 @@ async def vclick(page, text, exact=True, timeout=5000):
             await jsleep(0.05, 0.25)
             await page.mouse.click(x0, y0)
             return True
+    except:
+        pass
+    try:
+        await loc.click(timeout=timeout)
+        return True
     except:
         pass
     try:
@@ -802,6 +812,7 @@ async def one_draft(page, num, state):
 
     picks = []
     open_slots = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
+    failed_names = set()
     spin = 0
     while len(picks) < 11 and spin < 25:
         spin += 1
@@ -848,7 +859,7 @@ async def one_draft(page, num, state):
         best = None
         best_plan = False
         for n in combo_names:
-            if n in picked_set:
+            if n in picked_set or n in failed_names:
                 continue
             for c in cards:
                 if c["name"] == n and not c.get("disabled") and fits_open(c):
@@ -862,6 +873,8 @@ async def one_draft(page, num, state):
             scored = []
             for c in cards:
                 if c.get("disabled"):
+                    continue
+                if c["name"] in picked_set or c["name"] in failed_names:
                     continue
                 fo = fits_open(c)
                 if not fo:
@@ -879,6 +892,7 @@ async def one_draft(page, num, state):
             log(f"    -> {best['name']} ({best['role']} BAT{best.get('b',0)}/POW{best.get('p',0)}/BWL{best.get('bl',0)}) [FIXED]")
 
         # Slot: planned if free+fitting, else a RANDOM fitting open slot.
+        # (Removed from open_slots only once the game confirms the pick.)
         planned = plan_pos.get(best["name"])
         fo = fits_open(best)
         if planned in fo:
@@ -888,7 +902,6 @@ async def one_draft(page, num, state):
         else:
             log("    no fitting open slot, skipping")
             continue
-        open_slots.remove(slot)
 
         if not await vclick(page, best["name"], exact=False, timeout=5000):
             log(f"    could not click {best['name']}, skipping spin")
@@ -919,8 +932,6 @@ async def one_draft(page, num, state):
                 if slot not in usable:
                     # Human taps a random available slot, not always first.
                     slot = random.choice(usable)
-                if slot in open_slots:
-                    open_slots.remove(slot)
                 log(f"       pos {slot} among {usable}")
                 for _try in range(2):
                     await page.evaluate(f"""() => {{
@@ -938,6 +949,28 @@ async def one_draft(page, num, state):
                             break
                     except:
                         break
+
+        # Confirm the game registered the pick (SPIN/SIMULATE back).
+        # Never count phantoms: unregistered picks poison the XI.
+        registered = False
+        if len(picks) >= 10:
+            sim_here = await vvisible(page, "SIMULATE", exact=False)
+        else:
+            sim_here = False
+        for _ in range(5):
+            await page.wait_for_timeout(1000)
+            try:
+                if await vvisible(page, "SPIN") or sim_here or await vvisible(page, "SIMULATE", exact=False):
+                    registered = True
+                    break
+            except:
+                pass
+        if not registered:
+            log(f"    pick did not register game-side, discarding {best['name']}")
+            failed_names.add(best["name"])
+            continue
+        if slot in open_slots:
+            open_slots.remove(slot)
 
         pinned_year = plan_year.get(best["name"], "")
         squad_id = await find_team(page, best["name"], pinned_year)
