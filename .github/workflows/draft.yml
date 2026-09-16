@@ -28,7 +28,8 @@ jobs:
         if: steps.cache-pw.outputs.cache-hit != 'true'
       - name: Run drafter (short human-like session)
         env:
-          HANDLE: ${{ secrets.HANDLE || 'CoverDriveKing07' }}
+          HANDLE: ${{ secrets.HANDLE || 'Pranav Iyer' }}
+          STABLE_PID: ${{ secrets.STABLE_PID || 'mrpiyer07crkt' }}
           HOLD_SEC: "10"
           SEED_DELAY: "2"
           SKIP_PROB: "0.55"

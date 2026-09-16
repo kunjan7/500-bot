@@ -15,7 +15,7 @@ LB_URL = "https://500leaderboard.raasnhafiz.workers.dev"
 SHOTS_DIR = Path(__file__).parent / "shots_fixed11"
 SHOTS_DIR.mkdir(exist_ok=True)
 
-HANDLE = os.getenv("HANDLE", "CoverDriveKing07")
+HANDLE = os.getenv("HANDLE", "Pranav Iyer")
 HOLD_SEC = int(os.getenv("HOLD_SEC", "10"))
 SEED_DELAY = float(os.getenv("SEED_DELAY", "2"))
 SKIP_PROB = float(os.getenv("SKIP_PROB", "0.55"))
@@ -23,9 +23,10 @@ DAILY_CAP = int(os.getenv("DAILY_CAP", "50"))
 ROOT = Path(__file__).parent
 STATE_PATH = ROOT / "STATE.json"
 LOG_PATH = ROOT / "LIVE_LOG.md"
+DRAFT_LOG_PATH = ROOT / "DRAFT_LOG.md"
 
 # One stable ID forever (same browser = same human). Fresh identity.
-STABLE_PID = os.getenv("STABLE_PID", "").strip() or "mtqh4w00cdking07"
+STABLE_PID = os.getenv("STABLE_PID", "").strip() or "mrpiyer07crkt"
 
 def session_drafts():
     """Short human sessions: 4-6 drafts (5-7 on weekends)."""
@@ -254,14 +255,14 @@ async def vvisible(page, text, exact=True):
     return (await find_visible_button(page, text, exact)) >= 0
 
 def git_push_log(msg):
-    """Commit LIVE_LOG.md + STATE.json (rebase-retry for racing sessions)."""
+    """Commit LIVE_LOG.md + STATE.json + DRAFT_LOG.md (rebase-retry for racing sessions)."""
     def run(*a):
         try:
             return subprocess.run(a, cwd=str(ROOT), capture_output=True, timeout=90)
         except:
             return None
     try:
-        run("git", "add", "LIVE_LOG.md", "STATE.json")
+        run("git", "add", "LIVE_LOG.md", "STATE.json", "DRAFT_LOG.md")
         r = run("git", "commit", "-m", msg)
         if r is None or (r.returncode != 0 and b"nothing to commit" not in (r.stdout or b"") + (r.stderr or b"")):
             if r is not None and r.returncode != 0:
@@ -290,6 +291,37 @@ def live_entry(state, text):
         LOG_PATH.write_text(header + "\n".join(entries[:260]) + "\n", encoding="utf-8")
     except Exception as e:
         log(f"  live_entry err: {e}")
+
+def draft_log_entry(state, num, combo_name, won, score_val, overs_val, balls_val, picks, rank_info=""):
+    """Append a readable entry to DRAFT_LOG.md (tracked in git, mobile-friendly)."""
+    try:
+        import datetime as _dt
+        ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        status = "WIN" if won else "LOSS"
+        if picks:
+            xi_line = ", ".join(f"{p.get('pos')}.{p['name']}" for p in sorted(picks, key=lambda p: p.get("pos") or 99))
+        else:
+            xi_line = "(incomplete XI)"
+        sc = score_val if score_val and score_val != "?" else "N/A"
+        ov = overs_val if overs_val and overs_val != "?" else "N/A"
+        bl = balls_val if balls_val and balls_val != "?" else "N/A"
+        entry = (
+            f"## Draft #{num} — {status}\n"
+            f"- **Time:** {ts}\n"
+            f"- **Handle:** {HANDLE} (PID: {STABLE_PID})\n"
+            f"- **Combo:** {combo_name}\n"
+            f"- **Score:** {sc} in {ov} ov ({bl} balls)\n"
+            f"- **Rank:** {rank_info or 'N/A'}\n"
+            f"- **XI:** {xi_line}\n"
+            f"- **Day:** {state.get('wins', 0)}/{state.get('drafts', 0)} wins\n\n---\n\n"
+        )
+        if DRAFT_LOG_PATH.exists():
+            old = DRAFT_LOG_PATH.read_text(encoding="utf-8", errors="ignore")
+        else:
+            old = f"# Draft Log — {HANDLE}\n\nAll drafts with results, updated after each run.\n\n"
+        DRAFT_LOG_PATH.write_text(old + entry, encoding="utf-8")
+    except Exception as e:
+        log(f"  draft_log_entry err: {e}")
 
 def log(m):
     print(f"[{time.strftime('%H:%M:%S')}] {m}", flush=True)
@@ -988,7 +1020,7 @@ async def one_draft(page, num, state):
                 await asyncio.sleep(2)
         except:
             pass
-        return False, False
+        return False, False, [], "?", "?", "?"
     by_slot = sorted(picks, key=lambda p: p.get("pos") or 99)
     fixed_count = sum(1 for p in picks if p["name"] in combo_names)
     log(f"  Picked 11 players, {fixed_count}/11 from [{combo_name}]")
@@ -1077,55 +1109,33 @@ async def one_draft(page, num, state):
         await page.evaluate(f"() => localStorage.setItem('five-hundred-handle','{HANDLE}')")
         await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{STABLE_PID}')")
 
-        # No manual submit (proof-less POSTs are a server-visible marker).
-        # The game's own auto-submit reports the win; we just confirm below.
-        log("  Polling leaderboard until entry is confirmed...")
-        confirmed = False
-        today_e = count_e = you_e = None
-        for poll in range(8):
-            await asyncio.sleep(5)
-            try:
-                lb_check = await page.evaluate(r"""async (params) => {
-                    const {handle, pid} = params;
-                    const out = {};
-                    try {
-                        const r = await fetch('""" + LB_URL + r"""/board?window=today');
-                        if (r.ok) {
-                            const d = await r.json();
-                            const entries = d.top || [];
-                            const idx = entries.findIndex(e => e.handle === handle);
-                            if (idx >= 0) out['today'] = {rank: idx+1, balls: entries[idx].balls, runs: entries[idx].runs};
-                            else out['today'] = null;
-                        }
-                    } catch(e) {}
-                    try {
-                        const r = await fetch('""" + LB_URL + r"""/count?window=today&id=' + encodeURIComponent(pid));
-                        if (r.ok) {
-                            const d = await r.json();
-                            if (d.you) out['you'] = d.you;
-                        }
-                    } catch(e) {}
-                    return out;
-                }""", {"handle": HANDLE, "pid": STABLE_PID})
-                today_e = lb_check.get("today")
-                you_e = lb_check.get("you")
-                if today_e or you_e:
-                    parts = []
-                    if today_e: parts.append(f"fastest #{today_e['rank']} ({today_e['balls']} balls)")
-                    if you_e: parts.append(f"my id wins={you_e.get('entry', {}).get('v', you_e.get('v', '?'))}")
-                    log(f"  CONFIRMED! {', '.join(parts)}")
-                    confirmed = True
-                    break
-                else:
-                    log(f"  Poll {poll+1}/8: pending...")
-            except Exception as e:
-                log(f"  Poll {poll+1} err: {e}")
-        if not confirmed:
-            log("  Leaderboard not confirmed yet (cache?), proceeding anyway")
+        # Explicit SEED + SUBMIT: game auto-submit (J6) never fires in CI.
+        # Must register the XI and submit the win via leaderboard API directly.
+        if current_sid:
+            log(f"  Submitting win via API (sid={current_sid[:16]}...)...")
+            ranks = await api_submit(page, STABLE_PID, current_sid)
+            if ranks:
+                log(f"  SUBMIT confirmed! ranks={ranks}")
+            else:
+                # Fallback: re-seed then submit
+                log("  Submit failed, re-seeding...")
+                new_sid = await api_seed(page, STABLE_PID)
+                if new_sid:
+                    ranks = await api_submit(page, STABLE_PID, new_sid)
+                    log(f"  Re-submit result: {ranks}")
+        else:
+            # No sid captured — seed fresh then submit
+            log("  No game seed captured, seeding fresh...")
+            new_sid = await api_seed(page, STABLE_PID)
+            if new_sid:
+                ranks = await api_submit(page, STABLE_PID, new_sid)
+                log(f"  Fresh submit result: {ranks}")
+            else:
+                log("  SEED failed, win may not register")
 
         log(f"  +-- SCORECARD draft#{num} [{combo_name}] --")
         log(f"  | {score_val} in {overs_val} ov ({balls_val} balls) - HISTORY REWRITTEN")
-        log(f"  +-- {HANDLE} day wins growing, see LIVE_LOG.md --")
+        log(f"  +-- {HANDLE} day wins growing --")
         hold = HOLD_SEC + random.randint(0, 8)
         log(f"  Waiting {hold}s before next draft...")
         await page.wait_for_timeout(hold * 1000)
@@ -1150,7 +1160,7 @@ async def one_draft(page, num, state):
                 log("  re-entry failed, will retry next draft")
     except:
         pass
-    return ("HISTORY REWRITTEN" in body), True
+    return ("HISTORY REWRITTEN" in body), True, by_slot, score_val, overs_val, balls_val
 
 async def main():
     state = load_state()
@@ -1220,7 +1230,7 @@ async def main():
             if st["drafts"] >= DAILY_CAP:
                 log("Daily cap hit mid-session, stopping.")
                 break
-            won, completed = await one_draft(page, st["drafts"] + 1, st)
+            won, completed, picks, sc_val, ov_val, bl_val = await one_draft(page, st["drafts"] + 1, st)
             if completed:
                 st["drafts"] += 1
             if won:
@@ -1231,6 +1241,34 @@ async def main():
             ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
             entry = f"## {ts} — Draft #{st['drafts']} [{'WIN' if won else 'loss'}]\n"
             live_entry(st, entry)
+            # DRAFT_LOG.md entry with full details
+            try:
+                lb_rank = ""
+                lb_data = await page.evaluate(r"""async (params) => {
+                    try {
+                        const r = await fetch('""" + LB_URL + r"""/board?window=today');
+                        if (r.ok) {
+                            const d = await r.json();
+                            const entries = d.top || [];
+                            const idx = entries.findIndex(e => e.id === params.pid);
+                            if (idx >= 0) return {rank: idx+1, wins: entries[idx].v, handle: entries[idx].handle};
+                        }
+                    } catch(e) {}
+                    try {
+                        const r = await fetch('""" + LB_URL + r"""/count?window=today&id=' + encodeURIComponent(params.pid));
+                        if (r.ok) {
+                            const d = await r.json();
+                            if (d.you && d.you.entry) return {rank: d.you.rank, wins: d.you.entry.v};
+                        }
+                    } catch(e) {}
+                    return null;
+                }""", {"pid": STABLE_PID})
+                if lb_data:
+                    lb_rank = f"#{lb_data.get('rank', '?')} ({lb_data.get('wins', '?')} wins)"
+            except:
+                pass
+            combo_name_used = st.get("combos_used", [""])[-1] if st.get("combos_used") else ""
+            draft_log_entry(st, st["drafts"], combo_name_used, won, sc_val or "?", ov_val or "?", bl_val or "?", picks or [], lb_rank)
             git_push_log(f"live: draft {st['drafts']} {'win' if won else 'loss'} {ts}")
             log(f"Progress: session {wins}/{i} wins best {best_balls[0]} balls | day {st['wins']}/{st['drafts']}")
 
