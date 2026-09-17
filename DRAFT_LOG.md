@@ -104,3 +104,14 @@ All drafts with results, updated after each simulation. View on GitHub app/Chrom
 
 ---
 
+## Draft #10 — WIN — HISTORY REWRITTEN
+- **Time:** 2026-09-17 16:59 UTC
+- **Handle:** CoverDriveKing07 (PID: mrautop2win01)
+- **Combo:** MillerFreq
+- **Score:** 500/0 in 41.0 ov (246 balls)
+- **Rank:** TODAY — | WEEK — | ALL TIME —
+- **XI:** 1.Rohit Sharma, 2.Sachin Tendulkar, 3.Virat Kohli, 4.Daryl Mitchell, 5.AB de Villiers, 6.Heinrich Klaasen, 7.Shahid Afridi, 8.Malcolm Marshall, 9.Matheesha Pathirana, 10.Shane Warne, 11.Trent Boult
+- **Day:** 2/10 wins (cap 50/24h)
+
+---
+
