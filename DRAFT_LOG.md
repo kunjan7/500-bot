@@ -115,3 +115,14 @@ All drafts with results, updated after each simulation. View on GitHub app/Chrom
 
 ---
 
+## Draft #11 — LOSS
+- **Time:** 2026-09-17 17:51 UTC
+- **Handle:** CoverDriveKing07 (PID: mrautop2win01)
+- **Combo:** WillFreq
+- **Score:** 500/0 in 50.0 ov (300 balls)
+- **Rank:** TODAY — | WEEK — | ALL TIME —
+- **XI:** 1.Pathum Nissanka, 2.Paul Stirling, 3.Virat Kohli, 4.Sachin Tendulkar, 5.Jos Buttler, 6.Carl Hooper, 7.David Miller, 8.Thomas Odoyo, 9.Anil Kumble, 10.Shaheen Afridi, 11.James Anderson
+- **Day:** 2/11 wins (cap 50/24h)
+
+---
+
