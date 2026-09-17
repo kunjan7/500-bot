@@ -838,13 +838,20 @@ async def one_draft(page, num, state):
             pass
 
     await ensure_hack(page)
+    # Active steering: force spins to contain the next needed fixed player (winning XI)
     try:
-        await page.evaluate(f"() => {{ window.__FIXED_XI = {json.dumps(combo_names)}; window.__FIXED_SET = new Set({json.dumps(combo_names)}); }}")
-    except:
-        pass
-    # Native randomness for deals/spins (human-like); steering stays dormant.
-    try:
-        await page.evaluate("() => { const h=window.__h; if(h){h.on=false; h.spinReady=false;} window.__spinRV=null; }")
+        await page.evaluate(f"""() => {{
+            const h=window.__h;
+            if(h){{
+                h.on=true; h.spinReady=false; h.overrideReady=false;
+                h.picked=[]; h.openSlots=[1,2,3,4,5,6,7,8,9,10,11]; h.usage={{}};
+                window.__spinRV=null;
+            }}
+            window.__FIXED_XI = {json.dumps(combo_names)};
+            window.__FIXED_SET = new Set({json.dumps(combo_names)});
+            window.__FIXED_TEAM = {{}};
+        }}""")
+        log(f"  steering ON for [{combo_name}] -> {combo_names[:3]}...")
     except:
         pass
 
@@ -854,6 +861,26 @@ async def one_draft(page, num, state):
     spin = 0
     while len(picks) < 11 and spin < 25:
         spin += 1
+        # Steer this spin to the team containing next needed fixed player
+        try:
+            steer = await page.evaluate("""() => {
+                try { return window.__chooseTeamForNextFixed(); } catch(e){ return null; }
+            }""")
+            if steer:
+                idx = steer.get("idx", 0)
+                psz = steer.get("poolSize", 38)
+                await page.evaluate(f"""() => {{
+                    const h=window.__h;
+                    h.idx={idx}; h.poolSz={psz}; h.overrideReady=true;
+                    h.spinIdx={idx}; h.spinLen={psz}; h.spinReady=true;
+                    window.__spinRV=({idx}+0.5)/{psz};
+                }}""")
+                log(f"  steering spin {spin} -> {steer.get('team','?')} for {steer.get('need','?')} (idx {idx}/{psz})")
+            else:
+                await page.evaluate("() => { const h=window.__h; if(h){ h.on=false; } window.__spinRV=null; }")
+                log(f"  spin {spin}: no fixed need, random fallback")
+        except Exception as e:
+            log(f"  steer err: {e}")
         spun = await vclick(page, "SPIN", timeout=8000)
         cards = []
         if spun:
@@ -1012,9 +1039,43 @@ async def one_draft(page, num, state):
 
         pinned_year = plan_year.get(best["name"], "")
         squad_id = await find_team(page, best["name"], pinned_year)
+        if not squad_id:
+            # Fallback: search without year, then brute-force via card's team if captured
+            squad_id = await find_team(page, best["name"], "")
+            log(f"    squadId fallback for {best['name']}: '{squad_id}' (year '{pinned_year}')")
+        else:
+            log(f"    squadId {best['name']} -> {squad_id} (year {pinned_year})")
+        if not squad_id:
+            log(f"    WARNING: no squadId for {best['name']}, SEED will fail -> will retry find at submit")
+            # Try to capture via current spin's team if available
+            try:
+                last_spin = await page.evaluate("() => (window.__lastSpinResult||{}).id || ''")
+                if last_spin:
+                    squad_id = last_spin
+                    log(f"    squadId via lastSpinResult: {squad_id}")
+            except:
+                pass
         pick_entry = {"name": best["name"], "b": best.get("b", 0), "p": best.get("p", 0), "bl": best.get("bl", 0), "role": map_role_from_card(best), "squadId": squad_id, "pos": slot, "year": pinned_year}
         picks.append(pick_entry)
         current_picks.append(pick_entry)
+        # Sync JS steering state for next spin
+        try:
+            safe_n = best["name"].replace("'", "\\'")
+            await page.evaluate(f"""() => {{
+                const h=window.__h;
+                if(h){{
+                    h.picked.push('{safe_n}');
+                    h.openSlots = h.openSlots.filter(s=>s!={slot});
+                    // re-enable steering for next spin
+                    h.on = true;
+                    h.overrideReady=false; h.spinReady=false;
+                    window.__spinRV=null;
+                }}
+            }}""")
+            if squad_id:
+                await page.evaluate(f"() => {{ const h=window.__h; if(h) h.usage['{squad_id}']=(h.usage['{squad_id}']||0)+1; }}")
+        except:
+            pass
 
         if len(picks) >= 11:
             break
