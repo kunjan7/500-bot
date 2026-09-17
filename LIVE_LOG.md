@@ -1,6 +1,8 @@
 # Live Draft Log — CoverDriveKing07
 Day 2026-09-17 (UTC): 15 drafts, 3 wins
 
+## session end — day 3/15
+Day 2026-09-17 (UTC): 15 drafts, 3 wins
 ## 2026-09-17 17:59 UTC — Draft #15 [WIN]
 Day 2026-09-17 (UTC): 14 drafts, 2 wins
 ## 2026-09-17 17:56 UTC — Draft #14 [loss]
