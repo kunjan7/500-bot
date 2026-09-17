@@ -258,20 +258,30 @@ def git_push_log(msg):
     """Commit LIVE_LOG.md + STATE.json + DRAFT_LOG.md (rebase-retry for racing sessions)."""
     def run(*a):
         try:
-            return subprocess.run(a, cwd=str(ROOT), capture_output=True, timeout=90)
-        except:
+            return subprocess.run(a, cwd=str(ROOT), capture_output=True, timeout=90, text=True)
+        except Exception as e:
+            log(f"  git run err {a}: {e}")
             return None
     try:
-        run("git", "add", "LIVE_LOG.md", "STATE.json", "DRAFT_LOG.md")
+        a1 = run("git", "add", "LIVE_LOG.md", "STATE.json", "DRAFT_LOG.md")
+        if a1 and a1.returncode !=0:
+            log(f"  git add err: {a1.stderr[:300]}")
         r = run("git", "commit", "-m", msg)
-        if r is None or (r.returncode != 0 and b"nothing to commit" not in (r.stdout or b"") + (r.stderr or b"")):
+        if r is None or (r.returncode != 0 and "nothing to commit" not in (r.stdout or "") + (r.stderr or "")):
             if r is not None and r.returncode != 0:
+                log(f"  git commit err {r.returncode}: {r.stderr[:400]} out:{r.stdout[:400]}")
                 return False
-        for _ in range(3):
+            else:
+                log(f"  git commit nothing to commit, still pushing")
+        for attempt in range(3):
             p = run("git", "push", "origin", "main")
             if p is not None and p.returncode == 0:
+                log(f"  git push OK {msg}")
                 return True
-            run("git", "pull", "--rebase", "origin", "main")
+            log(f"  git push fail {attempt+1}/3: { (p.stderr if p else 'no p')[:400]}")
+            rb = run("git", "pull", "--rebase", "origin", "main")
+            if rb:
+                log(f"  git pull --rebase: {rb.stdout[:200]} err:{rb.stderr[:200]}")
         return False
     except Exception as e:
         log(f"  logpush err: {e}")
@@ -858,9 +868,11 @@ async def one_draft(page, num, state):
     picks = []
     open_slots = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     failed_names = set()
+    last_steer_team = ""  # squadId of spun team for next pick
     spin = 0
     while len(picks) < 11 and spin < 25:
         spin += 1
+        last_steer_team = ""
         # Steer this spin to the team containing next needed fixed player
         try:
             steer = await page.evaluate("""() => {
@@ -869,13 +881,14 @@ async def one_draft(page, num, state):
             if steer:
                 idx = steer.get("idx", 0)
                 psz = steer.get("poolSize", 38)
+                last_steer_team = steer.get("teamId","") or steer.get("team","")
                 await page.evaluate(f"""() => {{
                     const h=window.__h;
                     h.idx={idx}; h.poolSz={psz}; h.overrideReady=true;
                     h.spinIdx={idx}; h.spinLen={psz}; h.spinReady=true;
                     window.__spinRV=({idx}+0.5)/{psz};
                 }}""")
-                log(f"  steering spin {spin} -> {steer.get('team','?')} for {steer.get('need','?')} (idx {idx}/{psz})")
+                log(f"  steering spin {spin} -> {steer.get('team','?')} for {steer.get('need','?')} (idx {idx}/{psz}) teamId={last_steer_team}")
             else:
                 await page.evaluate("() => { const h=window.__h; if(h){ h.on=false; } window.__spinRV=null; }")
                 log(f"  spin {spin}: no fixed need, random fallback")
@@ -1038,16 +1051,28 @@ async def one_draft(page, num, state):
             open_slots.remove(slot)
 
         pinned_year = plan_year.get(best["name"], "")
-        squad_id = await find_team(page, best["name"], pinned_year)
+        squad_id = ""
+        # Prefer the spun team's id (steer) if it actually contains the player
+        if last_steer_team:
+            try:
+                has = await page.evaluate(f"""() => {{
+                    const No=window.__No||[]; const t=No.find(x=>x.id==='{last_steer_team}');
+                    return !!(t && t.players && t.players.some(p=>p.n==='{best["name"].replace("'", "\\'")}'));
+                }}""")
+                if has:
+                    squad_id = last_steer_team
+                    log(f"    squadId {best['name']} -> {squad_id} via steer team (year {pinned_year})")
+            except:
+                pass
         if not squad_id:
-            # Fallback: search without year, then brute-force via card's team if captured
-            squad_id = await find_team(page, best["name"], "")
-            log(f"    squadId fallback for {best['name']}: '{squad_id}' (year '{pinned_year}')")
-        else:
-            log(f"    squadId {best['name']} -> {squad_id} (year {pinned_year})")
+            squad_id = await find_team(page, best["name"], pinned_year)
+            if not squad_id:
+                squad_id = await find_team(page, best["name"], "")
+                log(f"    squadId fallback for {best['name']}: '{squad_id}' (year '{pinned_year}')")
+            else:
+                log(f"    squadId {best['name']} -> {squad_id} (year {pinned_year})")
         if not squad_id:
             log(f"    WARNING: no squadId for {best['name']}, SEED will fail -> will retry find at submit")
-            # Try to capture via current spin's team if available
             try:
                 last_spin = await page.evaluate("() => (window.__lastSpinResult||{}).id || ''")
                 if last_spin:
