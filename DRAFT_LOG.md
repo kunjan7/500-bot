@@ -38,3 +38,14 @@ All drafts with results, updated after each simulation. View on GitHub app/Chrom
 
 ---
 
+## Draft #4 — LOSS
+- **Time:** 2026-09-17 16:01 UTC
+- **Handle:** CoverDriveKing07 (PID: mrautop2win01)
+- **Combo:** ForceFreq
+- **Score:** 500/0 in 50.0 ov (300 balls)
+- **Rank:** TODAY — | WEEK — | ALL TIME —
+- **XI:** 1.Rohit Sharma, 2.Sachin Tendulkar, 3.Virat Kohli, 4.Daryl Mitchell, 5.AB de Villiers, 6.Heinrich Klaasen, 7.Shahid Afridi, 8.Wasim Akram, 9.Kagiso Rabada, 10.Simon Doull, 11.Danny Morrison
+- **Day:** 0/4 wins (cap 50/24h)
+
+---
+
