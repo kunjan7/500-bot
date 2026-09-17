@@ -540,9 +540,14 @@ async def setup_route_interception(page):
     await page.route("**/board**", lb_log)
 
     async def seed_cap(route):
-        # Game auto-seeds (E1) at 10/11 picks with Ga()=STABLE_PID.
-        # Capture its sid so our submit reuses the SAME session (no re-seed conflict).
+        # Game auto-seeds (E1) at 10/11 picks with Ga()=STABLE_PID. Log request + capture sid.
         try:
+            try:
+                req_body = route.request.post_data or ""
+                if req_body:
+                    log(f"  [SEED REQ] {req_body[:600]}")
+            except:
+                pass
             resp = await route.fetch()
             try:
                 txt = await resp.text()
@@ -556,9 +561,9 @@ async def setup_route_interception(page):
                             pass
                         log(f"  [GAME SEED] sid={sid[:20]}...")
                     else:
-                        log(f"  [GAME SEED] no sid (status={resp.status} body={txt[:120]})")
+                        log(f"  [GAME SEED] no sid (status={resp.status} body={txt[:200]})")
                 except:
-                    log(f"  [GAME SEED] unparseable (status={resp.status} body={txt[:120]})")
+                    log(f"  [GAME SEED] unparseable (status={resp.status} body={txt[:200]})")
                 await fulfill_text(route, resp, txt,
                     resp.headers.get("content-type", "application/json"))
             except:
