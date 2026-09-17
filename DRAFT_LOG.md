@@ -137,3 +137,14 @@ All drafts with results, updated after each simulation. View on GitHub app/Chrom
 
 ---
 
+## Draft #13 — LOSS
+- **Time:** 2026-09-17 17:55 UTC
+- **Handle:** CoverDriveKing07 (PID: mrautop2win01)
+- **Combo:** FireFreq
+- **Score:** 500/0 in 50.0 ov (300 balls)
+- **Rank:** TODAY — | WEEK — | ALL TIME —
+- **XI:** 1.Rohit Sharma, 2.Sachin Tendulkar, 3.Virat Kohli, 4.Kane Williamson, 5.Daryl Mitchell, 6.MS Dhoni, 7.Shahid Afridi, 8.Wasim Akram, 9.Maheesh Theekshana, 10.Jasprit Bumrah, 11.Matheesha Pathirana
+- **Day:** 2/13 wins (cap 50/24h)
+
+---
+
