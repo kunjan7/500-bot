@@ -1055,9 +1055,10 @@ async def one_draft(page, num, state):
         # Prefer the spun team's id (steer) if it actually contains the player
         if last_steer_team:
             try:
+                safe_nm = best["name"].replace("'", "\\'")
                 has = await page.evaluate(f"""() => {{
                     const No=window.__No||[]; const t=No.find(x=>x.id==='{last_steer_team}');
-                    return !!(t && t.players && t.players.some(p=>p.n==='{best["name"].replace("'", "\\'")}'));
+                    return !!(t && t.players && t.players.some(p=>p.n==='{safe_nm}'));
                 }}""")
                 if has:
                     squad_id = last_steer_team
