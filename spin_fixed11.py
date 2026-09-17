@@ -15,7 +15,7 @@ LB_URL = "https://500leaderboard.raasnhafiz.workers.dev"
 SHOTS_DIR = Path(__file__).parent / "shots_fixed11"
 SHOTS_DIR.mkdir(exist_ok=True)
 
-HANDLE = os.getenv("HANDLE", "Pranav Iyer")
+HANDLE = os.getenv("HANDLE", "Auto Player 2")
 HOLD_SEC = int(os.getenv("HOLD_SEC", "10"))
 SEED_DELAY = float(os.getenv("SEED_DELAY", "2"))
 SKIP_PROB = float(os.getenv("SKIP_PROB", "0.55"))
@@ -26,7 +26,7 @@ LOG_PATH = ROOT / "LIVE_LOG.md"
 DRAFT_LOG_PATH = ROOT / "DRAFT_LOG.md"
 
 # One stable ID forever (same browser = same human). Fresh identity.
-STABLE_PID = os.getenv("STABLE_PID", "").strip() or "mrpiyer07crkt"
+STABLE_PID = os.getenv("STABLE_PID", "").strip() or "mrautop2win01"
 
 def session_drafts():
     """Short human sessions: 4-6 drafts (5-7 on weekends)."""
@@ -292,12 +292,14 @@ def live_entry(state, text):
     except Exception as e:
         log(f"  live_entry err: {e}")
 
-def draft_log_entry(state, num, combo_name, won, score_val, overs_val, balls_val, picks, rank_info=""):
-    """Append a readable entry to DRAFT_LOG.md (tracked in git, mobile-friendly)."""
+def draft_log_entry(state, num, combo_name, won, score_val, overs_val, balls_val, picks, rank_info=None):
+    """Append a readable entry to DRAFT_LOG.md (tracked in git, mobile-friendly).
+    rank_info: dict {today, week, all} from on-screen rank reveal (25s wait).
+    File is read-only viewable via GitHub mobile app / Chrome at repo root."""
     try:
         import datetime as _dt
         ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-        status = "WIN" if won else "LOSS"
+        status = "WIN — HISTORY REWRITTEN" if won else "LOSS"
         if picks:
             xi_line = ", ".join(f"{p.get('pos')}.{p['name']}" for p in sorted(picks, key=lambda p: p.get("pos") or 99))
         else:
@@ -305,20 +307,24 @@ def draft_log_entry(state, num, combo_name, won, score_val, overs_val, balls_val
         sc = score_val if score_val and score_val != "?" else "N/A"
         ov = overs_val if overs_val and overs_val != "?" else "N/A"
         bl = balls_val if balls_val and balls_val != "?" else "N/A"
+        if isinstance(rank_info, dict):
+            rank_str = f"TODAY {rank_info.get('today','—')} | WEEK {rank_info.get('week','—')} | ALL TIME {rank_info.get('all','—')}"
+        else:
+            rank_str = str(rank_info) if rank_info else "N/A (loss or not revealed)"
         entry = (
             f"## Draft #{num} — {status}\n"
             f"- **Time:** {ts}\n"
             f"- **Handle:** {HANDLE} (PID: {STABLE_PID})\n"
             f"- **Combo:** {combo_name}\n"
             f"- **Score:** {sc} in {ov} ov ({bl} balls)\n"
-            f"- **Rank:** {rank_info or 'N/A'}\n"
+            f"- **Rank:** {rank_str}\n"
             f"- **XI:** {xi_line}\n"
-            f"- **Day:** {state.get('wins', 0)}/{state.get('drafts', 0)} wins\n\n---\n\n"
+            f"- **Day:** {state.get('wins', 0)}/{state.get('drafts', 0)} wins (cap {DAILY_CAP}/24h)\n\n---\n\n"
         )
         if DRAFT_LOG_PATH.exists():
             old = DRAFT_LOG_PATH.read_text(encoding="utf-8", errors="ignore")
         else:
-            old = f"# Draft Log — {HANDLE}\n\nAll drafts with results, updated after each run.\n\n"
+            old = f"# Draft Log — {HANDLE}\n\nAll drafts with results, updated after each simulation. View on GitHub app/Chrome at `DRAFT_LOG.md` (repo root, read-only).\n\n"
         DRAFT_LOG_PATH.write_text(old + entry, encoding="utf-8")
     except Exception as e:
         log(f"  draft_log_entry err: {e}")
@@ -1020,7 +1026,7 @@ async def one_draft(page, num, state):
                 await asyncio.sleep(2)
         except:
             pass
-        return False, False, [], "?", "?", "?"
+        return False, False, [], "?", "?", "?", {"today":"—","week":"—","all":"—","raw":""}
     by_slot = sorted(picks, key=lambda p: p.get("pos") or 99)
     fixed_count = sum(1 for p in picks if p["name"] in combo_names)
     log(f"  Picked 11 players, {fixed_count}/11 from [{combo_name}]")
@@ -1099,6 +1105,7 @@ async def one_draft(page, num, state):
     score_m = re.search(r"(\d{3,}/\d+)", body)
     score_val = score_m.group(1) if score_m else "?"
 
+    rank_info = {"today": "—", "week": "—", "all": "—", "raw": ""}
     if "HISTORY REWRITTEN" in body:
         if balls_val and balls_val < best_balls[0]:
             best_balls[0] = balls_val
@@ -1110,21 +1117,25 @@ async def one_draft(page, num, state):
         await page.evaluate(f"() => localStorage.setItem('five-hundred-pid','{STABLE_PID}')")
 
         # Explicit SEED + SUBMIT: game auto-submit (J6) never fires in CI.
-        # Must register the XI and submit the win via leaderboard API directly.
         if current_sid:
             log(f"  Submitting win via API (sid={current_sid[:16]}...)...")
             ranks = await api_submit(page, STABLE_PID, current_sid)
             if ranks:
                 log(f"  SUBMIT confirmed! ranks={ranks}")
+                # map api ranks to rank_info
+                try:
+                    if isinstance(ranks, dict):
+                        if "today" in ranks: rank_info["today"] = f"#{ranks['today']}"
+                        if "week" in ranks: rank_info["week"] = f"#{ranks['week']}"
+                        if "all" in ranks: rank_info["all"] = f"#{ranks['all']}"
+                except: pass
             else:
-                # Fallback: re-seed then submit
                 log("  Submit failed, re-seeding...")
                 new_sid = await api_seed(page, STABLE_PID)
                 if new_sid:
                     ranks = await api_submit(page, STABLE_PID, new_sid)
                     log(f"  Re-submit result: {ranks}")
         else:
-            # No sid captured — seed fresh then submit
             log("  No game seed captured, seeding fresh...")
             new_sid = await api_seed(page, STABLE_PID)
             if new_sid:
@@ -1133,8 +1144,41 @@ async def one_draft(page, num, state):
             else:
                 log("  SEED failed, win may not register")
 
+        # ---- 25s rank reveal: TODAY / WEEK / ALL TIME shown on result screen ----
+        log("  Waiting 25s for rank reveal (TODAY/WEEK/ALL TIME)...")
+        await page.wait_for_timeout(25000)
+        try:
+            body_rank = await page.inner_text("body")
+            rank_info["raw"] = body_rank[:1200]
+            # Try to parse rank numbers from result overlay
+            # e.g. "TODAY #12" or "#12 TODAY" or "Rank 12"
+            import re as _re2
+            for key, pat in [("today", r"TODAY[^\n#]*#\s*(\d+)"), ("week", r"WEEK[^\n#]*#\s*(\d+)"), ("all", r"ALL\s*TIME[^\n#]*#\s*(\d+)")]:
+                m = _re2.search(pat, body_rank, _re2.I)
+                if m: rank_info[key] = f"#{m.group(1)}"
+            # fallback generic # numbers near labels
+            if rank_info["today"] == "—":
+                m2 = _re2.search(r"#\s*(\d+)[^\n]*TODAY", body_rank, _re2.I)
+                if m2: rank_info["today"] = f"#{m2.group(1)}"
+            # also scrape via DOM evaluate for exact rank nodes
+            try:
+                dom_ranks = await page.evaluate("""() => {
+                    const t=document.body.innerText||'';
+                    const o={today:'—',week:'—',all:'—'};
+                    // look for elements containing TODAY/WEEK/ALL TIME
+                    const els=[...document.querySelectorAll('*')].map(e=>(e.innerText||'').slice(0,80));
+                    return {text: t.slice(0,1500), els: els.slice(0,60)};
+                }""")
+                if dom_ranks and rank_info["today"] == "—":
+                    log(f"  rank DOM text snippet: {(dom_ranks.get('text','')[:400]).replace(chr(10),' | ')}")
+            except: pass
+            log(f"  Ranks scraped: TODAY {rank_info['today']} | WEEK {rank_info['week']} | ALL TIME {rank_info['all']}")
+        except Exception as e:
+            log(f"  rank scrape err: {e}")
+
         log(f"  +-- SCORECARD draft#{num} [{combo_name}] --")
         log(f"  | {score_val} in {overs_val} ov ({balls_val} balls) - HISTORY REWRITTEN")
+        log(f"  | Ranks TODAY {rank_info['today']} WEEK {rank_info['week']} ALL {rank_info['all']}")
         log(f"  +-- {HANDLE} day wins growing --")
         hold = HOLD_SEC + random.randint(0, 8)
         log(f"  Waiting {hold}s before next draft...")
@@ -1160,7 +1204,7 @@ async def one_draft(page, num, state):
                 log("  re-entry failed, will retry next draft")
     except:
         pass
-    return ("HISTORY REWRITTEN" in body), True, by_slot, score_val, overs_val, balls_val
+    return ("HISTORY REWRITTEN" in body), True, by_slot, score_val, overs_val, balls_val, rank_info
 
 async def main():
     state = load_state()
@@ -1230,7 +1274,8 @@ async def main():
             if st["drafts"] >= DAILY_CAP:
                 log("Daily cap hit mid-session, stopping.")
                 break
-            won, completed, picks, sc_val, ov_val, bl_val = await one_draft(page, st["drafts"] + 1, st)
+            # one_draft now: SIMULATE -> SKIP TO END -> 25s rank reveal -> DRAFT AGAIN loop
+            won, completed, picks, sc_val, ov_val, bl_val, rank_info = await one_draft(page, st["drafts"] + 1, st)
             if completed:
                 st["drafts"] += 1
             if won:
@@ -1241,34 +1286,9 @@ async def main():
             ts = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
             entry = f"## {ts} — Draft #{st['drafts']} [{'WIN' if won else 'loss'}]\n"
             live_entry(st, entry)
-            # DRAFT_LOG.md entry with full details
-            try:
-                lb_rank = ""
-                lb_data = await page.evaluate(r"""async (params) => {
-                    try {
-                        const r = await fetch('""" + LB_URL + r"""/board?window=today');
-                        if (r.ok) {
-                            const d = await r.json();
-                            const entries = d.top || [];
-                            const idx = entries.findIndex(e => e.id === params.pid);
-                            if (idx >= 0) return {rank: idx+1, wins: entries[idx].v, handle: entries[idx].handle};
-                        }
-                    } catch(e) {}
-                    try {
-                        const r = await fetch('""" + LB_URL + r"""/count?window=today&id=' + encodeURIComponent(params.pid));
-                        if (r.ok) {
-                            const d = await r.json();
-                            if (d.you && d.you.entry) return {rank: d.you.rank, wins: d.you.entry.v};
-                        }
-                    } catch(e) {}
-                    return null;
-                }""", {"pid": STABLE_PID})
-                if lb_data:
-                    lb_rank = f"#{lb_data.get('rank', '?')} ({lb_data.get('wins', '?')} wins)"
-            except:
-                pass
+            # DRAFT_LOG.md: updated after EACH simulation (win or loss) with on-screen ranks
             combo_name_used = st.get("combos_used", [""])[-1] if st.get("combos_used") else ""
-            draft_log_entry(st, st["drafts"], combo_name_used, won, sc_val or "?", ov_val or "?", bl_val or "?", picks or [], lb_rank)
+            draft_log_entry(st, st["drafts"], combo_name_used, won, sc_val or "?", ov_val or "?", bl_val or "?", picks or [], rank_info)
             git_push_log(f"live: draft {st['drafts']} {'win' if won else 'loss'} {ts}")
             log(f"Progress: session {wins}/{i} wins best {best_balls[0]} balls | day {st['wins']}/{st['drafts']}")
 
