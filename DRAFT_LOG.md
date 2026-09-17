@@ -60,3 +60,14 @@ All drafts with results, updated after each simulation. View on GitHub app/Chrom
 
 ---
 
+## Draft #6 — LOSS
+- **Time:** 2026-09-17 16:51 UTC
+- **Handle:** CoverDriveKing07 (PID: mrautop2win01)
+- **Combo:** CrownFreq
+- **Score:** 500/0 in 50.0 ov (300 balls)
+- **Rank:** TODAY — | WEEK — | ALL TIME —
+- **XI:** 1.Rohit Sharma, 2.Brian Lara, 3.Virat Kohli, 4.Daryl Mitchell, 5.AB de Villiers, 6.Heinrich Klaasen, 7.Jos Buttler, 8.Wasim Akram, 9.Muttiah Muralitharan, 10.Matheesha Pathirana, 11.Maheesh Theekshana
+- **Day:** 0/6 wins (cap 50/24h)
+
+---
+
