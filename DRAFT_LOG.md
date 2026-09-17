@@ -49,3 +49,14 @@ All drafts with results, updated after each simulation. View on GitHub app/Chrom
 
 ---
 
+## Draft #5 — LOSS
+- **Time:** 2026-09-17 16:49 UTC
+- **Handle:** CoverDriveKing07 (PID: mrautop2win01)
+- **Combo:** DhoniFreq
+- **Score:** 500/0 in 27.3 ov (164 balls)
+- **Rank:** TODAY — | WEEK — | ALL TIME —
+- **XI:** 1.Paul Stirling, 2.Pathum Nissanka, 3.Viv Richards, 4.Steve Tikolo, 5.Neil Fairbrother, 6.Angelo Mathews, 7.Shahid Afridi, 8.Abdul Razzaq, 9.Rashid Khan, 10.Trent Boult, 11.Muttiah Muralitharan
+- **Day:** 0/5 wins (cap 50/24h)
+
+---
+
