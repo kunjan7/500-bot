@@ -170,3 +170,14 @@ All drafts with results, updated after each simulation. View on GitHub app/Chrom
 
 ---
 
+## Draft #1 — LOSS
+- **Time:** 2026-09-18 09:37 UTC
+- **Handle:** CoverDriveKing07 (PID: mrautop2win01)
+- **Combo:** RootedFreq
+- **Score:** 500/0 in 50.0 ov (300 balls)
+- **Rank:** TODAY — | WEEK — | ALL TIME —
+- **XI:** 1.Rohit Sharma, 2.Travis Head, 3.Brian Lara, 4.Scott Styris, 5.AB de Villiers, 6.Neil Fairbrother, 7.Mahmudullah, 8.Wanindu Hasaranga, 9.Trent Boult, 10.Shane Warne, 11.Muttiah Muralitharan
+- **Day:** 0/1 wins (cap 50/24h)
+
+---
+
